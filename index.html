@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Acceso privado</title>
+  <meta name="description" content="Portal privado para clientes autorizados." />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="site-shell landing-shell">
+    <section class="card split-card">
+      <div class="left-panel">
+        <div class="tabs" role="tablist" aria-label="Acceso y solicitud">
+          <button class="tab is-active" type="button" data-view="login">Acceder</button>
+          <button class="tab" type="button" data-view="request">Solicitar acceso</button>
+        </div>
+
+        <section class="view is-active" data-content="login">
+          <p class="eyebrow">Acceso clientes</p>
+          <h1>Acceder</h1>
+          <p class="lead">Portal privado para clientes autorizados.</p>
+
+          <form id="loginForm" class="stack-form" novalidate>
+            <label for="loginEmail">Correo electrónico</label>
+            <input id="loginEmail" name="email" type="email" placeholder="contacto@estudio.com" autocomplete="email" required />
+            <button class="primary-button ghost-button" type="submit">Acceder</button>
+            <p class="helper">Serás redirigido al portal privado.</p>
+            <p id="loginMessage" class="status-message" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="view" data-content="request">
+          <p class="eyebrow">Solicitud</p>
+          <h1>Solicitar acceso</h1>
+          <p class="lead">Solicitá habilitación para ingresar al portal.</p>
+
+          <form id="requestForm" class="stack-form" novalidate>
+            <label for="studioName">Nombre del estudio</label>
+            <input id="studioName" name="studio" type="text" placeholder="Nombre del estudio" required />
+
+            <label for="requestEmail">Correo</label>
+            <input id="requestEmail" name="email" type="email" placeholder="contacto@estudio.com" autocomplete="email" required />
+
+            <label for="requestPhone">Teléfono</label>
+            <input id="requestPhone" name="phone" type="tel" placeholder="11 2345 6789" autocomplete="tel" required />
+
+            <button class="primary-button" type="submit">Solicitar acceso</button>
+            <p id="requestMessage" class="status-message" aria-live="polite"></p>
+          </form>
+        </section>
+      </div>
+
+      <div class="right-panel logo-panel" aria-hidden="true">
+        <img src="assets/isologo.jpeg" alt="" class="hero-logo" />
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
