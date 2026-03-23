@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>En Bruto</title>
+  <meta name="description" content="Portal privado para clientes autorizados." />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500&family=Barlow:wght@300;400&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:       #080806;
+      --bg2:      #0d0c09;
+      --ink:      #dedad2;
+      --ink-mid:  rgba(222,218,210,0.42);
+      --ink-dim:  rgba(222,218,210,0.18);
+      --gold:     #b8a440;
+      --rule:     rgba(222,218,210,0.08);
+      --rule2:    rgba(222,218,210,0.14);
+      --font-ui:  'Barlow Condensed', ui-sans-serif, sans-serif;
+      --font-body:'Barlow', ui-sans-serif, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+
+    body {
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-weight: 300;
+      font-size: 15px;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Grain */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 999;
+      opacity: 0.028;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 160px 160px;
+    }
+
+    /* Layout */
+    .shell {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* ── LEFT ── */
+    .side-form {
+      display: flex;
+      flex-direction: column;
+      padding: 52px 60px 44px;
+      border-right: 1px solid var(--rule2);
+      min-height: 100vh;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--rule2);
+      margin-bottom: 44px;
+    }
+
+    .tab {
+      appearance: none; background: none; border: none;
+      border-bottom: 1px solid transparent;
+      margin-bottom: -1px;
+      padding: 0 0 14px;
+      margin-right: 32px;
+      color: var(--ink-mid);
+      font-family: var(--font-ui);
+      font-size: 0.7rem; font-weight: 500;
+      letter-spacing: 0.24em; text-transform: uppercase;
+      cursor: pointer;
+      transition: color 180ms, border-color 180ms;
+    }
+    .tab:hover { color: var(--ink); }
+    .tab.is-active { color: var(--ink); border-bottom-color: var(--gold); }
+
+    /* Views */
+    .view { display: none; flex-direction: column; }
+    .view.is-active { display: flex; }
+
+    /* Headline */
+    .view-head {
+      margin-bottom: 44px;
+    }
+
+    .view-tag {
+      font-family: var(--font-ui);
+      font-size: 0.64rem; font-weight: 500;
+      letter-spacing: 0.26em; text-transform: uppercase;
+      color: var(--gold);
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+    .view-tag::before {
+      content: '';
+      display: block; width: 18px; height: 1px;
+      background: var(--gold); opacity: 0.6;
+    }
+
+    h2 {
+      font-family: var(--font-ui);
+      font-weight: 300;
+      font-size: clamp(3rem, 5.5vw, 5rem);
+      line-height: 0.92;
+      letter-spacing: -0.01em;
+      text-transform: uppercase;
+    }
+
+    h2 .accent { color: var(--gold); display: block; }
+
+    .view-desc {
+      margin-top: 22px;
+      font-size: 0.88rem;
+      color: var(--ink-mid);
+      max-width: 32ch;
+      line-height: 1.75;
+      padding-left: 16px;
+      border-left: 1px solid var(--rule2);
+    }
+
+    /* Form */
+    .form { display: flex; flex-direction: column; }
+
+    .field {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--rule);
+      position: relative;
+    }
+    .field:first-child { border-top: 1px solid var(--rule); }
+
+    .field::after {
+      content: ''; position: absolute;
+      bottom: -1px; left: 0;
+      height: 1px; width: 0;
+      background: var(--gold);
+      transition: width 320ms ease;
+    }
+    .field:focus-within::after { width: 100%; }
+
+    label {
+      font-family: var(--font-ui);
+      font-size: 0.62rem; font-weight: 500;
+      letter-spacing: 0.26em; text-transform: uppercase;
+      color: var(--ink-dim);
+      transition: color 200ms;
+    }
+    .field:focus-within label { color: var(--gold); }
+
+    input {
+      appearance: none; background: none;
+      border: none; outline: none;
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 0.96rem; font-weight: 300;
+      padding: 0; width: 100%;
+    }
+    input::placeholder { color: var(--ink-dim); }
+
+    /* Button */
+    .btn {
+      margin-top: 30px;
+      align-self: flex-start;
+      appearance: none; background: none;
+      border: 1px solid var(--rule2);
+      color: var(--ink);
+      font-family: var(--font-ui);
+      font-size: 0.7rem; font-weight: 500;
+      letter-spacing: 0.26em; text-transform: uppercase;
+      cursor: pointer;
+      padding: 15px 30px;
+      display: flex; align-items: center; gap: 11px;
+      position: relative; overflow: hidden;
+      transition: border-color 220ms, color 220ms;
+    }
+    .btn::before {
+      content: ''; position: absolute; inset: 0;
+      background: rgba(184,164,64,0.12);
+      transform: scaleX(0); transform-origin: left;
+      transition: transform 300ms ease;
+    }
+    .btn:hover::before { transform: scaleX(1); }
+    .btn:hover { border-color: var(--gold); color: var(--gold); }
+    .btn span, .btn svg { position: relative; z-index: 1; }
+    .btn svg { width: 11px; height: 11px; transition: transform 200ms; }
+    .btn:hover svg { transform: translate(2px,-2px); }
+
+    .status {
+      margin-top: 14px; font-size: 0.78rem;
+      min-height: 1em; color: var(--ink-mid);
+    }
+    .status.is-error   { color: #c07a7a; }
+    .status.is-success { color: #86a870; }
+
+    /* Footer contacts */
+    .foot {
+      margin-top: auto;
+      padding-top: 52px;
+      display: flex;
+      align-items: center;
+      gap: 0;
+      border-top: 1px solid var(--rule);
+    }
+
+    .contact-link {
+      display: flex; align-items: center; gap: 7px;
+      color: var(--ink-dim);
+      text-decoration: none;
+      font-family: var(--font-ui);
+      font-size: 0.62rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      transition: color 200ms;
+      padding-right: 24px;
+    }
+    .contact-link:not(:first-child) {
+      padding-left: 24px;
+      border-left: 1px solid var(--rule);
+    }
+    .contact-link:hover { color: var(--ink-mid); }
+
+    .contact-link svg {
+      width: 11px; height: 11px;
+      opacity: 0.5; flex-shrink: 0;
+      transition: opacity 200ms;
+    }
+    .contact-link:hover svg { opacity: 0.8; }
+
+    /* ── RIGHT ── */
+    .side-visual {
+      position: relative;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 64px;
+      background: var(--bg2);
+      overflow: hidden;
+    }
+
+    /* Topographic SVG bg */
+    .topo-bg {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      opacity: 0.06;
+    }
+
+    /* Corner marks */
+    .corner {
+      position: absolute; width: 16px; height: 16px; opacity: 0.25;
+    }
+    .corner--tl { top: 24px; left: 24px; border-top: 1px solid var(--gold); border-left: 1px solid var(--gold); }
+    .corner--tr { top: 24px; right: 24px; border-top: 1px solid var(--gold); border-right: 1px solid var(--gold); }
+    .corner--bl { bottom: 24px; left: 24px; border-bottom: 1px solid var(--gold); border-left: 1px solid var(--gold); }
+    .corner--br { bottom: 24px; right: 24px; border-bottom: 1px solid var(--gold); border-right: 1px solid var(--gold); }
+
+    /* Logo */
+    .logo-wrap {
+      position: relative; z-index: 2;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 28px;
+    }
+
+    .hero-logo {
+      width: min(240px, 58%);
+      display: block;
+      opacity: 0.82;
+      filter: invert(1) brightness(0.78);
+      mix-blend-mode: luminosity;
+    }
+
+    /* Scale indicator */
+    .scale {
+      position: absolute;
+      bottom: 32px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; align-items: center; gap: 8px;
+      opacity: 0.2;
+    }
+    .scale-line { width: 60px; height: 1px; background: var(--gold); }
+    .scale-label {
+      font-family: var(--font-ui);
+      font-size: 0.58rem; letter-spacing: 0.22em;
+      color: var(--gold); text-transform: uppercase;
+    }
+
+    /* Animations */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .tabs      { animation: fadeUp 480ms ease both; animation-delay: 60ms; }
+    .view      { animation: fadeUp 480ms ease both; animation-delay: 140ms; }
+    .foot      { animation: fadeUp 480ms ease both; animation-delay: 220ms; }
+    .side-visual .logo-wrap { animation: fadeUp 600ms ease both; animation-delay: 100ms; }
+
+    /* Responsive */
+    @media (max-width: 860px) {
+      .shell { grid-template-columns: 1fr; }
+      .side-form { border-right: none; border-bottom: 1px solid var(--rule2); min-height: unset; }
+      .side-visual { min-height: 280px; }
+    }
+    @media (max-width: 540px) {
+      .side-form { padding: 32px 22px 28px; }
+      .side-visual { padding: 32px 22px; min-height: 220px; }
+      .btn { align-self: stretch; justify-content: center; }
+      .foot { flex-wrap: wrap; gap: 12px; }
+      .contact-link:not(:first-child) { border-left: none; padding-left: 0; }
+    }
+  </style>
+</head>
+<body>
+<main class="shell">
+
+  <!-- LEFT -->
+  <div class="side-form">
+
+    <nav class="tabs" role="tablist" aria-label="Navegación">
+      <button class="tab is-active" role="tab" aria-selected="true" data-view="login" type="button">Acceder</button>
+      <button class="tab" role="tab" aria-selected="false" data-view="request" type="button">Solicitar acceso</button>
+    </nav>
+
+    <!-- Login -->
+    <section class="view is-active" data-content="login" role="tabpanel">
+      <div class="view-head">
+        <p class="view-tag">Acceso clientes</p>
+        <h2>Acceder<span class="accent">al portal.</span></h2>
+        <p class="view-desc">Portal privado para estudios autorizados.</p>
+      </div>
+      <form id="loginForm" class="form" novalidate>
+        <div class="field">
+          <label for="loginEmail">Correo electrónico</label>
+          <input id="loginEmail" name="email" type="email" placeholder="contacto@estudio.com" autocomplete="email" required />
+        </div>
+        <button class="btn" type="submit">
+          <span>Ingresar</span>
+          <svg viewBox="0 0 11 11" fill="none" aria-hidden="true">
+            <path d="M1 10L10 1M10 1H3M10 1V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <p id="loginMessage" class="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <!-- Request -->
+    <section class="view" data-content="request" role="tabpanel">
+      <div class="view-head">
+        <p class="view-tag">Habilitación</p>
+        <h2>Solicitar<span class="accent">acceso.</span></h2>
+        <p class="view-desc">Completá el formulario y te contactamos en 24 h.</p>
+      </div>
+      <form id="requestForm" class="form" novalidate>
+        <div class="field">
+          <label for="studioName">Nombre del estudio</label>
+          <input id="studioName" name="studio" type="text" placeholder="Estudio ejemplo S.A." required />
+        </div>
+        <div class="field">
+          <label for="requestEmail">Correo</label>
+          <input id="requestEmail" name="email" type="email" placeholder="contacto@estudio.com" autocomplete="email" required />
+        </div>
+        <div class="field">
+          <label for="requestPhone">Teléfono</label>
+          <input id="requestPhone" name="phone" type="tel" placeholder="11 2345-6789" autocomplete="tel" required />
+        </div>
+        <button class="btn" type="submit">
+          <span>Enviar solicitud</span>
+          <svg viewBox="0 0 11 11" fill="none" aria-hidden="true">
+            <path d="M1 10L10 1M10 1H3M10 1V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <p id="requestMessage" class="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <!-- Contacts -->
+    <footer class="foot" aria-label="Contacto">
+      <a class="contact-link" href="mailto:contacto@enbrutostudio.com.ar" aria-label="Email">
+        <svg viewBox="0 0 14 11" fill="none" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="13" height="10" rx="1" stroke="currentColor" stroke-width="1.1"/>
+          <path d="M1 1.5L7 6.5L13 1.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+        Mail
+      </a>
+      <a class="contact-link" href="https://wa.me/5491173641852" target="_blank" rel="noopener" aria-label="WhatsApp">
+        <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <circle cx="7" cy="7" r="6.2" stroke="currentColor" stroke-width="1.1"/>
+          <path d="M4.5 4.8C4.8 4.2 5.6 3.8 6.2 4.2L6.9 4.8C7.2 5.1 7.1 5.5 6.9 5.8L6.6 6.2C6.8 6.6 7.4 7.2 7.8 7.4L8.2 7.1C8.5 6.9 8.9 6.8 9.2 7.1L9.8 7.8C10.2 8.4 9.8 9.2 9.2 9.5C7.8 10.1 4.0 8.5 3.5 6.5C3.3 5.8 3.8 5.1 4.5 4.8Z" stroke="currentColor" stroke-width="0.9" stroke-linecap="round"/>
+        </svg>
+        WhatsApp
+      </a>
+      <a class="contact-link" href="https://instagram.com/enbruto.insta" target="_blank" rel="noopener" aria-label="Instagram">
+        <svg viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <rect x="0.7" y="0.7" width="12.6" height="12.6" rx="3.2" stroke="currentColor" stroke-width="1.1"/>
+          <circle cx="7" cy="7" r="2.6" stroke="currentColor" stroke-width="1.1"/>
+          <circle cx="10.4" cy="3.6" r="0.6" fill="currentColor"/>
+        </svg>
+        Instagram
+      </a>
+    </footer>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div class="side-visual" aria-hidden="true">
+
+    <!-- Topographic lines as bg -->
+    <svg class="topo-bg" viewBox="0 0 500 600" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <path d="M-20 480 C60 460 120 420 200 380 C280 340 340 290 380 230 C420 170 440 100 460 40" stroke="var(--ink)" stroke-width="1"/>
+      <path d="M-20 520 C80 495 150 450 240 405 C330 360 390 305 430 245 C470 185 485 115 500 60" stroke="var(--ink)" stroke-width="1"/>
+      <path d="M-20 440 C50 425 100 395 170 360 C240 325 300 278 340 218 C380 158 400 90 420 20" stroke="var(--ink)" stroke-width="1"/>
+      <path d="M50 600 C100 560 130 510 170 460 C210 410 260 365 300 305 C340 245 355 175 370 110 C385 45 390 -10 400 -30" stroke="var(--ink)" stroke-width="1"/>
+      <path d="M-20 560 C100 535 180 490 270 440 C360 390 415 335 455 270 C495 205 505 135 515 80" stroke="var(--ink)" stroke-width="1"/>
+      <path d="M150 600 C185 555 205 500 235 445 C265 390 300 340 330 280 C360 220 370 155 378 95 C386 35 388 -15 393 -40" stroke="var(--ink)" stroke-width="1"/>
+      <path d="M-20 400 C40 390 80 370 140 340 C200 310 260 268 300 210 C340 152 358 86 374 20" stroke="var(--ink)" stroke-width="1"/>
+    </svg>
+
+    <div class="corner corner--tl"></div>
+    <div class="corner corner--tr"></div>
+    <div class="corner corner--bl"></div>
+    <div class="corner corner--br"></div>
+
+    <div class="logo-wrap">
+      <img src="assets/isologo.jpeg" alt="En Bruto" class="hero-logo" />
+    </div>
+
+    <div class="scale">
+      <div class="scale-line"></div>
+      <span class="scale-label">En Bruto</span>
+      <div class="scale-line"></div>
+    </div>
+
+  </div>
+
+</main>
+
+<script src="app.js"></script>
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.view;
+      document.querySelectorAll('.tab').forEach(t => { t.classList.remove('is-active'); t.setAttribute('aria-selected','false'); });
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('is-active'));
+      tab.classList.add('is-active');
+      tab.setAttribute('aria-selected','true');
+      document.querySelector(`[data-content="${target}"]`).classList.add('is-active');
+    });
+  });
+</script>
+</body>
+</html>
