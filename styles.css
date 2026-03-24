@@ -167,3 +167,71 @@ input:focus, textarea:focus, select:focus {
   input { min-height: 74px; padding: 0 24px; }
   .primary-button { min-height: 74px; }
 }
+/* ═══════════════════════════════════════════════════════════════
+   MEJORAS LANDING — pegar al FINAL del styles.css de la landing
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Footer de contacto ─────────────────────────────────────────── */
+
+.site-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 18px 34px 24px;
+}
+
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.32);
+  text-decoration: none;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  transition: color 0.15s;
+}
+
+.footer-link:hover { color: rgba(255, 255, 255, 0.75); }
+
+.footer-link svg { flex-shrink: 0; opacity: 0.8; }
+
+.footer-sep {
+  color: rgba(255, 255, 255, 0.15);
+  font-size: 0.72rem;
+}
+
+/* ── Spinner en botón ───────────────────────────────────────────── */
+
+.btn-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Link dentro de mensaje de error ────────────────────────────── */
+
+.msg-link {
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.msg-link:hover { opacity: 1; }
+
+/* ── Responsive footer ──────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .site-footer { padding: 14px 18px 20px; gap: 8px 10px; }
+  .footer-sep  { display: none; }
+  .site-footer { flex-direction: column; align-items: flex-start; padding-left: 32px; }
+}
