@@ -1,5 +1,5 @@
 const PORTAL_URL = 'https://portal.enbrutoestudio.com.ar';
-const APPS_SCRIPT_URL = 'PEGAR_AQUI_TU_URL_DE_APPS_SCRIPT';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyOXk1eSBz_OuVeDagtYTbMYQvjVtdcBRaXTHf-X926DcOGp-XFWEveAvKJp0RoYI4ftg/exec';
 
 const tabs = document.querySelectorAll('.tab');
 const views = document.querySelectorAll('.view');
