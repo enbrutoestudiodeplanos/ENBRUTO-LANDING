@@ -3,7 +3,7 @@
 // Maneja: login con magic link + solicitud de nuevo acceso
 // ═══════════════════════════════════════════════════════════════════
 
-const APPS_SCRIPT_URL = ‘https://script.google.com/macros/s/AKfycbycCla-MC00DcwOM3BSx2DT6GLUzldZZTf9o9muHrTmeUuawh3GuXHGUytFVfOs-ByXbg/exec’;
+const APPS_SCRIPT_URL = ‘https://script.google.com/macros/s/AKfycbyEOf8gMCFIPlsC3xwp_fzWAijHfqU6G8Ifv1WK-MPk3PTpBxUeXR0Y953tv69WE2iAPQ/exec’;
 
 // ── Red ───────────────────────────────────────────────────────────
 
