@@ -1,4 +1,5 @@
 <!doctype html>
+
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -16,105 +17,144 @@
 <body>
   <main class="site-shell portal-shell">
     <section class="card split-card">
- 
-      <div class="left-panel">
-        <p class="eyebrow">Acceso clientes</p>
-        <h1>En Bruto<br>Estudio</h1>
-        <p class="lead">Ingresá al sistema privado de pedidos o solicitá habilitación para tu estudio.</p>
- 
-        <div class="tabs" role="tablist" aria-label="Acceso portal">
-          <button class="tab is-active" data-view="login" role="tab" type="button" aria-selected="true">
-            Acceder
-          </button>
-          <button class="tab" data-view="request" role="tab" type="button" aria-selected="false">
-            Solicitar acceso
-          </button>
-        </div>
- 
-        <div class="view is-active" data-content="login">
-          <form id="loginForm" class="stack-form" novalidate>
-            <label for="loginEmail">Correo electrónico</label>
-            <div class="field-wrap">
-              <input
-                id="loginEmail"
-                name="email"
-                type="email"
-                placeholder="contacto@enbrutoestudio.com.ar"
-                autocomplete="email"
-                required
-              />
-            </div>
-            <button class="primary-button" type="submit"><span>Acceder</span></button>
-            <p class="helper">Acceso exclusivo para correos previamente habilitados.</p>
-            <p id="loginMessage" class="status-message" aria-live="polite"></p>
-          </form>
-        </div>
- 
-        <div class="view" data-content="request">
-          <form id="requestForm" class="stack-form" novalidate>
-            <label for="requestStudio">Nombre del estudio</label>
-            <div class="field-wrap">
-              <input id="requestStudio" name="studio" type="text" placeholder="Estudio Pérez" required />
-            </div>
-            <label for="requestEmail">Correo</label>
-            <div class="field-wrap">
-              <input id="requestEmail" name="email" type="email" placeholder="contacto@enbrutoestudio.com.ar" required />
-            </div>
-            <label for="requestPhone">Teléfono</label>
-            <div class="field-wrap">
-              <input id="requestPhone" name="phone" type="tel" placeholder="+54 11 0000-0000" required />
-            </div>
-            <button class="primary-button" type="submit"><span>Solicitar acceso</span></button>
-            <p class="helper">Revisamos cada alta manualmente para mantener el acceso curado.</p>
-            <p id="requestMessage" class="status-message" aria-live="polite"></p>
-          </form>
-        </div>
+
+```
+  <div class="left-panel">
+    <p class="eyebrow">Acceso clientes</p>
+    <h1>En Bruto<br>Estudio</h1>
+    <p class="lead">Ingresá al sistema privado de pedidos o solicitá habilitación para tu estudio.</p>
+
+    <div class="tabs" role="tablist" aria-label="Acceso portal">
+      <button class="tab is-active" data-view="login" role="tab" type="button" aria-selected="true">
+        Acceder
+      </button>
+      <button class="tab" data-view="request" role="tab" type="button" aria-selected="false">
+        Solicitar acceso
+      </button>
+    </div>
+
+    <!-- ── TAB: ACCEDER ── -->
+    <div class="view is-active" data-content="login">
+
+      <!-- Vista A: formulario de email -->
+      <div id="loginFormView">
+        <form id="loginForm" class="stack-form" novalidate>
+          <label for="loginEmail">Correo electrónico</label>
+          <div class="field-wrap">
+            <input
+              id="loginEmail"
+              name="email"
+              type="email"
+              placeholder="contacto@enbrutoestudio.com.ar"
+              autocomplete="email"
+              required
+            />
+          </div>
+          <button class="primary-button" type="submit"><span>Enviar enlace de acceso</span></button>
+          <p class="helper">Te enviaremos un enlace seguro a tu correo. Sin contraseña · Un solo uso · Válido 30 min.</p>
+          <p id="loginMessage" class="status-message" aria-live="polite"></p>
+        </form>
       </div>
- 
-      <div class="right-panel logo-panel" aria-hidden="true">
-        <img src="assets/LANDING.svg" class="topo-bg" alt="" />
- 
-        <div class="hero-stage">
-          <div class="hero-stage__glow"></div>
-          <div class="hero-stage__frame">
-            <div class="hero-stage__top">
-              <div class="spec-item">
-                <span class="spec-item__label">ENTREGA</span>
-                <strong>rápida</strong>
-              </div>
-              <div class="spec-item">
-                <span class="spec-item__label">ARCHIVOS</span>
-                <strong>ordenados</strong>
-              </div>
-              <div class="spec-item">
-                <span class="spec-item__label">ATENCIÓN</span>
-                <strong>directa</strong>
-              </div>
-            </div>
-            <div class="hero-stage__center">
-              <img src="assets/isologo.svg" alt="" class="hero-logo" />
-            </div>
-            <div class="hero-stage__specs">
-              <div class="spec-item">
-                <span class="spec-item__label">ACCESO</span>
-                <strong>privado</strong>
-              </div>
-              <div class="spec-item">
-                <span class="spec-item__label">FLUJO</span>
-                <strong>simple</strong>
-              </div>
-              <div class="spec-item">
-                <span class="spec-item__label">SOPORTE</span>
-                <strong>humano</strong>
-              </div>
-            </div>
+
+      <!-- Vista B: confirmación enviado -->
+      <div id="loginSentView" style="display:none;">
+        <p class="eyebrow" style="color:#b8d4a0;margin-bottom:12px;">Enlace enviado</p>
+        <p class="lead compact">
+          Revisá tu bandeja de entrada.<br>
+          El enlace expira en <strong>30 minutos</strong> y es de un solo uso.
+        </p>
+        <button id="loginResetBtn" class="mini-button" type="button" style="margin-top:28px;">
+          Usar otro correo
+        </button>
+      </div>
+
+    </div>
+
+    <!-- ── TAB: SOLICITAR ACCESO ── -->
+    <div class="view" data-content="request">
+
+      <!-- Vista A: formulario de solicitud -->
+      <div id="requestFormView">
+        <form id="requestForm" class="stack-form" novalidate>
+          <label for="requestStudio">Nombre del estudio</label>
+          <div class="field-wrap">
+            <input id="requestStudio" name="studio" type="text" placeholder="Estudio Pérez" required />
+          </div>
+          <label for="requestEmail">Correo</label>
+          <div class="field-wrap">
+            <input id="requestEmail" name="email" type="email" placeholder="contacto@enbrutoestudio.com.ar" required />
+          </div>
+          <label for="requestPhone">Teléfono</label>
+          <div class="field-wrap">
+            <input id="requestPhone" name="phone" type="tel" placeholder="+54 11 0000-0000" required />
+          </div>
+          <button class="primary-button" type="submit"><span>Solicitar acceso</span></button>
+          <p class="helper">Revisamos cada alta manualmente para mantener el acceso curado.</p>
+          <p id="requestMessage" class="status-message" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <!-- Vista B: confirmación solicitud enviada -->
+      <div id="requestSentView" style="display:none;">
+        <p class="eyebrow" style="color:#b8d4a0;margin-bottom:12px;">Solicitud recibida</p>
+        <p class="lead compact">
+          Recibimos tu solicitud.<br>
+          Te avisaremos a la brevedad cuando tu acceso esté habilitado.
+        </p>
+        <button id="requestResetBtn" class="mini-button" type="button" style="margin-top:28px;">
+          Enviar otra solicitud
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="right-panel logo-panel" aria-hidden="true">
+    <img src="assets/LANDING.svg" class="topo-bg" alt="" />
+
+    <div class="hero-stage">
+      <div class="hero-stage__glow"></div>
+      <div class="hero-stage__frame">
+        <div class="hero-stage__top">
+          <div class="spec-item">
+            <span class="spec-item__label">ENTREGA</span>
+            <strong>rápida</strong>
+          </div>
+          <div class="spec-item">
+            <span class="spec-item__label">ARCHIVOS</span>
+            <strong>ordenados</strong>
+          </div>
+          <div class="spec-item">
+            <span class="spec-item__label">ATENCIÓN</span>
+            <strong>directa</strong>
+          </div>
+        </div>
+        <div class="hero-stage__center">
+          <img src="assets/isologo.svg" alt="" class="hero-logo" />
+        </div>
+        <div class="hero-stage__specs">
+          <div class="spec-item">
+            <span class="spec-item__label">ACCESO</span>
+            <strong>privado</strong>
+          </div>
+          <div class="spec-item">
+            <span class="spec-item__label">FLUJO</span>
+            <strong>simple</strong>
+          </div>
+          <div class="spec-item">
+            <span class="spec-item__label">SOPORTE</span>
+            <strong>humano</strong>
           </div>
         </div>
       </div>
- 
-    </section>
+    </div>
+  </div>
+
+</section>
+```
+
   </main>
- 
+
   <footer class="site-footer">
     <a href="mailto:contacto@enbrutoestudio.com.ar" class="footer-link">
       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -140,8 +180,8 @@
       @enbruto.insta
     </a>
   </footer>
- 
+
   <script src="app.js"></script>
+
 </body>
 </html>
- 
