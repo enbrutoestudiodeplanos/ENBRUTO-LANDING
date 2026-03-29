@@ -1,166 +1,165 @@
-const PORTAL_URL = "https://portal.enbrutoestudio.com.ar";
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwN-0FLG5GAxrI7PB5cXSEziMegrkN4XHRQvdPZHuc7US34KX2OrFnzRRN1nlXoltJITQ/exec";
+// ═══════════════════════════════════════════════════════════════════
+// EN BRUTO ESTUDIO — app.js (sitio principal enbrutoestudio.com.ar)
+// Maneja: login con magic link + solicitud de nuevo acceso
+// ═══════════════════════════════════════════════════════════════════
 
-const tabs = document.querySelectorAll(".tab");
-const views = document.querySelectorAll(".view");
+const APPS_SCRIPT_URL = ‘https://script.google.com/macros/s/AKfycbwN-0FLG5GAxrI7PB5cXSEziMegrkN4XHRQvdPZHuc7US34KX2OrFnzRRN1nlXoltJITQ/exec’;
 
-function activateView(name) {
-  tabs.forEach((tab) => {
-    const isActive = tab.dataset.view === name;
-    tab.classList.toggle("is-active", isActive);
-    tab.setAttribute("aria-selected", isActive ? "true" : "false");
-  });
+// ── Red ───────────────────────────────────────────────────────────
 
-  views.forEach((view) => {
-    const isActive = view.dataset.content === name;
-    view.classList.toggle("is-active", isActive);
-  });
+async function postData(payload) {
+const res  = await fetch(APPS_SCRIPT_URL, {
+method:  ‘POST’,
+headers: { ‘Content-Type’: ‘text/plain;charset=utf-8’ },
+body:    JSON.stringify(payload),
+});
+const text = await res.text();
+try { return JSON.parse(text); }
+catch { throw new Error(‘Respuesta inválida del servidor.’); }
 }
 
-tabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    activateView(tab.dataset.view);
+// ── Helpers UI ────────────────────────────────────────────────────
+
+function setMessage(id, text, type = ‘’) {
+const el = document.getElementById(id);
+if (!el) return;
+el.textContent = text;
+el.classList.remove(‘is-error’, ‘is-success’);
+if (type) el.classList.add(type);
+}
+
+function setButtonState(btn, loading) {
+if (!btn) return;
+btn.disabled   = loading;
+btn.innerHTML  = loading
+? ‘<span class="btn-spinner"></span><span>Enviando…</span>’
+: `<span>${btn.dataset.label || 'Enviar'}</span>`;
+}
+
+// ── TABS ──────────────────────────────────────────────────────────
+
+function initTabs() {
+const tabs  = document.querySelectorAll(’.tab’);
+const views = document.querySelectorAll(’.view’);
+
+tabs.forEach(tab => {
+tab.addEventListener(‘click’, () => {
+const target = tab.dataset.view;
+
+```
+  tabs.forEach(t => {
+    t.classList.toggle('is-active', t === tab);
+    t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+  });
+
+  views.forEach(v => {
+    v.classList.toggle('is-active', v.dataset.content === target);
   });
 });
+```
 
-function setMessage(el, message, type) {
-  el.textContent = message;
-  el.classList.remove("is-error", "is-success");
-  if (type) el.classList.add(type);
+});
 }
 
-function setRichErrorMessage(el, html) {
-  el.innerHTML = html;
-  el.classList.remove("is-success");
-  el.classList.add("is-error");
+// ── LOGIN — Solicitar magic link ──────────────────────────────────
+
+async function handleLogin(e) {
+e.preventDefault();
+const email = document.getElementById(‘loginEmail’)?.value.trim().toLowerCase() || ‘’;
+const btn   = e.currentTarget.querySelector(‘button[type=“submit”]’);
+
+if (!email || !/^[^\s@]+@[^\s@]+.[^\s@]+$/.test(email)) {
+setMessage(‘loginMessage’, ‘Ingresá un correo válido.’, ‘is-error’);
+return;
 }
 
-function setButtonLoading(btn, loading, loadingText, fallbackText) {
-  btn.disabled = loading;
+setMessage(‘loginMessage’, ‘’);
+setButtonState(btn, true);
 
-  if (loading) {
-    btn.setAttribute("data-label", btn.textContent);
-    btn.innerHTML = `<span class="btn-spinner"></span> ${loadingText}`;
-  } else {
-    btn.innerHTML = `<span>${btn.getAttribute("data-label") || fallbackText}</span>`;
-  }
+try {
+// El backend responde siempre de forma genérica — no revela si el email existe
+await postData({ action: ‘request_access’, email });
+showLoginSent();
+} catch {
+setMessage(‘loginMessage’, ‘Error de conexión. Intentá de nuevo.’, ‘is-error’);
+setButtonState(btn, false);
+}
 }
 
-const loginForm = document.getElementById("loginForm");
-const requestForm = document.getElementById("requestForm");
-
-if (loginForm) {
-  loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const email = document.getElementById("loginEmail").value.trim().toLowerCase();
-    const msg = document.getElementById("loginMessage");
-    const btn = event.currentTarget.querySelector('button[type="submit"]');
-
-    if (!email) {
-      setMessage(msg, "Ingresá un correo válido.", "is-error");
-      return;
-    }
-
-    setButtonLoading(btn, true, "VALIDANDO...", "ACCEDER");
-    setMessage(msg, "");
-
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          action: "login",
-          email
-        })
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        setRichErrorMessage(
-          msg,
-          'Ese correo no tiene acceso habilitado. ¿Querés <a class="msg-link" href="#">solicitar acceso</a>?'
-        );
-
-        const link = msg.querySelector(".msg-link");
-        if (link) {
-          link.addEventListener("click", (e) => {
-            e.preventDefault();
-            activateView("request");
-
-            const reqEmail = document.getElementById("requestEmail");
-            const reqStudio = document.getElementById("requestStudio");
-
-            if (reqEmail) reqEmail.value = email;
-            if (reqStudio) reqStudio.focus();
-          });
-        }
-        return;
-      }
-
-      const profile = {
-        estudio: data.estudio || "-",
-        email: data.email || email,
-        telefono: data.telefono || ""
-      };
-
-      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(profile))));
-      setMessage(msg, "Acceso confirmado. Entrando...", "is-success");
-
-      setTimeout(() => {
-        window.location.href = `${PORTAL_URL}/panel.html?session=${encoded}`;
-      }, 400);
-    } catch (error) {
-      setMessage(msg, "No se pudo conectar. Intentá de nuevo.", "is-error");
-    } finally {
-      setButtonLoading(btn, false, "VALIDANDO...", "ACCEDER");
-    }
-  });
+function showLoginSent() {
+document.getElementById(‘loginFormView’).style.display = ‘none’;
+document.getElementById(‘loginSentView’).style.display = ‘block’;
 }
 
-if (requestForm) {
-  requestForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const form = event.currentTarget;
-    const msg = document.getElementById("requestMessage");
-    const btn = form.querySelector('button[type="submit"]');
-
-    const payload = {
-      action: "requestAccess",
-      studio: form.studio.value.trim(),
-      email: form.email.value.trim(),
-      phone: form.phone.value.trim()
-    };
-
-    if (!payload.studio || !payload.email || !payload.phone) {
-      setMessage(msg, "Completá todos los campos.", "is-error");
-      return;
-    }
-
-    setButtonLoading(btn, true, "ENVIANDO...", "SOLICITAR ACCESO");
-    setMessage(msg, "");
-
-    try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-
-      if (!data.ok) {
-        throw new Error(data.error || "No se pudo enviar la solicitud.");
-      }
-
-      setMessage(msg, "Solicitud enviada. Te contactaremos por la vía habitual.", "is-success");
-      form.reset();
-    } catch (error) {
-      setMessage(msg, error.message || "No se pudo enviar la solicitud.", "is-error");
-    } finally {
-      setButtonLoading(btn, false, "ENVIANDO...", "SOLICITAR ACCESO");
-    }
-  });
+function resetLoginForm() {
+document.getElementById(‘loginFormView’).style.display = ‘block’;
+document.getElementById(‘loginSentView’).style.display  = ‘none’;
+const input = document.getElementById(‘loginEmail’);
+if (input) { input.value = ‘’; input.focus(); }
+setMessage(‘loginMessage’, ‘’);
+// Restaurar botón
+const btn = document.querySelector(’#loginForm button[type=“submit”]’);
+if (btn) setButtonState(btn, false);
 }
+
+// ── SOLICITAR ACCESO — Alta de nuevo cliente ──────────────────────
+
+async function handleRequest(e) {
+e.preventDefault();
+const studio = document.getElementById(‘requestStudio’)?.value.trim() || ‘’;
+const email  = document.getElementById(‘requestEmail’)?.value.trim().toLowerCase() || ‘’;
+const phone  = document.getElementById(‘requestPhone’)?.value.trim() || ‘’;
+const btn    = e.currentTarget.querySelector(‘button[type=“submit”]’);
+
+if (!studio) { setMessage(‘requestMessage’, ‘Ingresá el nombre del estudio.’, ‘is-error’); return; }
+if (!email || !/^[^\s@]+@[^\s@]+.[^\s@]+$/.test(email)) {
+setMessage(‘requestMessage’, ‘Ingresá un correo válido.’, ‘is-error’); return;
+}
+if (!phone) { setMessage(‘requestMessage’, ‘Ingresá un teléfono de contacto.’, ‘is-error’); return; }
+
+setMessage(‘requestMessage’, ‘’);
+setButtonState(btn, true);
+
+try {
+const data = await postData({ action: ‘solicitar_acceso’, studio, email, phone });
+if (!data.ok) throw new Error(data.error || ‘No se pudo enviar la solicitud.’);
+showRequestSent();
+} catch (err) {
+setMessage(‘requestMessage’, err.message || ‘Error de conexión. Intentá de nuevo.’, ‘is-error’);
+setButtonState(btn, false);
+}
+}
+
+function showRequestSent() {
+document.getElementById(‘requestFormView’).style.display = ‘none’;
+document.getElementById(‘requestSentView’).style.display = ‘block’;
+}
+
+function resetRequestForm() {
+document.getElementById(‘requestFormView’).style.display = ‘block’;
+document.getElementById(‘requestSentView’).style.display  = ‘none’;
+[‘requestStudio’, ‘requestEmail’, ‘requestPhone’].forEach(id => {
+const el = document.getElementById(id);
+if (el) el.value = ‘’;
+});
+setMessage(‘requestMessage’, ‘’);
+const btn = document.querySelector(’#requestForm button[type=“submit”]’);
+if (btn) setButtonState(btn, false);
+document.getElementById(‘requestStudio’)?.focus();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+
+document.addEventListener(‘DOMContentLoaded’, () => {
+// Guardar labels originales de los botones para restaurar tras loading
+document.querySelectorAll(’.primary-button’).forEach(btn => {
+btn.dataset.label = btn.querySelector(‘span’)?.textContent || btn.textContent;
+});
+
+initTabs();
+
+document.getElementById(‘loginForm’)?.addEventListener(‘submit’, handleLogin);
+document.getElementById(‘requestForm’)?.addEventListener(‘submit’, handleRequest);
+document.getElementById(‘loginResetBtn’)?.addEventListener(‘click’, resetLoginForm);
+document.getElementById(‘requestResetBtn’)?.addEventListener(‘click’, resetRequestForm);
+});
