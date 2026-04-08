@@ -1,0 +1,1360 @@
+// ═══════════════════════════════════════════════════════════════════
+// EN BRUTO ESTUDIO — app.js (dominio principal)
+// Auth: Magic link via Apps Script · Sin Supabase
+// ═══════════════════════════════════════════════════════════════════
+
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyHjHN5w6-Bff7Wk88-ac4qRGD_fr_Vpqk96dc8dv4KjCqpzgfJdZG7cbsW9qE3BURbTw/exec';
+
+let orderSubmitting = false;
+let allOrders       = [];
+let showingAll      = false;
+let selectedFile    = null;
+let selectedPdfPages = 1;
+let priceTable      = {};
+
+// ── Sesión ────────────────────────────────────────────────────────
+// sessionId opaco en localStorage con expiración client-side (TTL 30 días, igual que el backend).
+// Se invalida al hacer logout o cuando el TTL vence.
+
+function getSessionId() {
+try {
+const item = JSON.parse(localStorage.getItem('portalSid') || 'null');
+if (!item) return '';
+if (new Date() > new Date(item.exp)) { localStorage.removeItem('portalSid'); return ''; }
+return item.sid;
+} catch { return ''; }
+}
+
+function setSessionId(sid, exp) {
+localStorage.setItem('portalSid', JSON.stringify({ sid, exp }));
+}
+
+function clearSession() {
+localStorage.removeItem('portalSid');
+}
+
+// ── Red ───────────────────────────────────────────────────────────
+
+async function postData(payload) {
+const sid  = getSessionId();
+const body = sid ? { ...payload, sessionId: sid } : payload;
+
+const controller = new AbortController();
+const timeoutId  = setTimeout(() => controller.abort(), 30000);
+
+try {
+const response = await fetch(APPS_SCRIPT_URL, {
+method:  'POST',
+headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+body:    JSON.stringify(body),
+signal:  controller.signal,
+});
+clearTimeout(timeoutId);
+
+const text = await response.text();
+if (!response.ok) throw new Error('Error del servidor.');
+try {
+return JSON.parse(text);
+} catch {
+throw new Error('La respuesta del servidor no es válida.');
+}
+} catch (err) {
+clearTimeout(timeoutId);
+if (err.name === 'AbortError') throw new Error('El servidor tardó demasiado. Intentá de nuevo.');
+throw err;
+}
+}
+
+function toBase64(file) {
+return new Promise((resolve, reject) => {
+const reader = new FileReader();
+reader.onload  = () => resolve(reader.result);
+reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+reader.readAsDataURL(file);
+});
+}
+
+// ── Helpers de UI ─────────────────────────────────────────────────
+
+function setMessage(el, message, type = '') {
+if (!el) return;
+el.textContent = message;
+el.classList.remove('is-error', 'is-success');
+if (type) el.classList.add(type);
+}
+
+function showToast(message, type = 'is-info', duration = 3800) {
+const container = document.getElementById('toastContainer');
+if (!container) return;
+const toast = document.createElement('div');
+toast.className = `toast ${type}`;
+const dot = document.createElement('span');
+dot.className = 'toast-dot';
+const text = document.createElement('span');
+text.textContent = message;
+toast.appendChild(dot);
+toast.appendChild(text);
+container.appendChild(toast);
+const dismiss = () => {
+  toast.classList.add('is-exiting');
+  toast.addEventListener('animationend', () => toast.remove(), { once: true });
+};
+const timer = setTimeout(dismiss, duration);
+toast.addEventListener('click', () => { clearTimeout(timer); dismiss(); });
+}
+
+function isUrgent() {
+return document.getElementById('urgentCheck')?.checked === true;
+}
+
+// ── Precios ───────────────────────────────────────────────────────
+
+async function fetchPrices() {
+try {
+const data = await postData({ action: 'get_prices' });
+priceTable  = (data.ok && data.prices) ? data.prices : {};
+} catch {
+priceTable = {};
+}
+updatePriceDisplay();
+}
+
+async function getPdfPageCount(file) {
+try {
+const buf = await file.arrayBuffer();
+const str = new TextDecoder('latin1').decode(buf);
+const counts = [...str.matchAll(/\/Count\s+(\d+)/g)].map(m => +m[1]);
+return counts.length ? Math.max(...counts) : 1;
+} catch { return 1; }
+}
+
+function getPriceKey(medida, tipo) {
+const tipoKey = String(tipo).toLowerCase().includes('color') ? 'color' : 'byn';
+return `${medida}_${tipoKey}`;
+}
+
+function calculatePrice() {
+const medida    = document.getElementById('orderSize')?.value || '';
+const tipo      = document.getElementById('orderType')?.value || '';
+const cantidad  = parseInt(document.getElementById('orderQty')?.value || '1', 10) || 1;
+const entrega   = document.querySelector('input[name="delivery"]:checked')?.value || '';
+const key       = getPriceKey(medida, tipo);
+const unitPrice = Number(priceTable[key]);
+if (!unitPrice) return null;
+const hojas         = selectedPdfPages || 1;
+const subtotal      = unitPrice * hojas * cantidad;
+const recargo       = isUrgent() ? Math.round(subtotal * 0.25) : 0;
+const deliveryPrice = Number(priceTable[`entrega_${entrega}`]) || 0;
+return { unitPrice, hojas, cantidad, subtotal, recargo, deliveryPrice, total: subtotal + recargo + deliveryPrice };
+}
+
+function formatARS(amount) {
+return new Intl.NumberFormat('es-AR', {
+style: 'currency', currency: 'ARS',
+minimumFractionDigits: 0, maximumFractionDigits: 0,
+}).format(amount);
+}
+
+function updatePriceDisplay() {
+const display   = document.getElementById('priceDisplay');
+const valueEl   = document.getElementById('priceValue');
+const breakdown = document.getElementById('priceBreakdown');
+if (!display || !valueEl) return;
+
+const result = calculatePrice();
+if (!result) { display.style.display = 'none'; return; }
+
+display.style.display = 'flex';
+valueEl.textContent   = formatARS(result.total);
+
+if (breakdown) {
+breakdown.textContent = '';
+const addText = t => breakdown.appendChild(document.createTextNode(t));
+const sep     = () => { if (breakdown.childNodes.length) addText(' · '); };
+if (result.hojas > 1 && result.cantidad > 1) {
+addText(`${result.hojas} hojas × ${result.cantidad} cop. × ${formatARS(result.unitPrice)}`);
+} else if (result.hojas > 1) {
+addText(`${result.hojas} hojas × ${formatARS(result.unitPrice)}`);
+} else if (result.cantidad > 1) {
+addText(`${result.cantidad} × ${formatARS(result.unitPrice)}`);
+}
+if (result.deliveryPrice > 0) {
+sep();
+addText(`entrega +${formatARS(result.deliveryPrice)}`);
+}
+if (result.recargo > 0) {
+sep();
+const urgent = document.createElement('span');
+urgent.className = 'price-urgent';
+urgent.textContent = `urgente +${formatARS(result.recargo)}`;
+breakdown.appendChild(urgent);
+}
+}
+}
+
+// ── Render panel ──────────────────────────────────────────────────
+
+function fillPanel(profile) {
+const panelStudio = document.getElementById('panelStudio');
+const panelEmail  = document.getElementById('panelEmail');
+const orderStudy  = document.getElementById('orderStudy');
+if (panelStudio) panelStudio.textContent = profile.estudio || '—';
+if (panelEmail)  panelEmail.textContent  = profile.email   || '';
+if (orderStudy)  orderStudy.value        = profile.estudio || '';
+}
+
+function fillProfile(profile) {
+const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
+set('profileStudio', profile.estudio);
+set('profileEmail',  profile.email);
+set('profilePhone',  profile.telefono);
+if (profile.expiresAt) {
+const exp = new Date(profile.expiresAt);
+set('profileSessionExp', exp.toLocaleString('es-AR'));
+}
+const logoImg = document.getElementById('profileLogoImg');
+if (logoImg && profile.logo_url) {
+logoImg.src = profile.logo_url;
+logoImg.style.objectFit = 'cover';
+}
+}
+
+function initLogoUpload() {
+const wrap    = document.getElementById('logoWrap');
+const input   = document.getElementById('logoFileInput');
+const msg     = document.getElementById('logoUploadMsg');
+if (!wrap || !input) return;
+
+const MAX_MB  = 5;
+const ALLOWED = ['image/png', 'image/jpeg', 'image/webp'];
+
+function setLogoMsg(text, isError = false) {
+if (!msg) return;
+msg.textContent = text;
+msg.style.color = isError ? '#e07070' : 'var(--muted)';
+}
+
+async function handleFile(file) {
+if (!file) return;
+if (!ALLOWED.includes(file.type)) {
+setLogoMsg('Solo PNG, JPG o WEBP.', true); return;
+}
+if (file.size > MAX_MB * 1024 * 1024) {
+setLogoMsg(`El archivo supera ${MAX_MB} MB.`, true); return;
+}
+
+setLogoMsg('Subiendo…');
+const logoImg = document.getElementById('profileLogoImg');
+
+try {
+const base64 = await toBase64(file);
+if (logoImg) { logoImg.src = base64; logoImg.style.objectFit = 'cover'; }
+
+const data = await postData({ action: 'upload_logo', fileData: base64, fileName: file.name });
+if (!data.ok) throw new Error(data.error || 'No se pudo subir la imagen.');
+
+if (logoImg && data.logo_url) logoImg.src = data.logo_url;
+setLogoMsg('');
+showToast('Imagen de perfil actualizada.', 'is-success');
+} catch (err) {
+setLogoMsg(err.message || 'Error al subir la imagen.', true);
+if (logoImg) logoImg.src = 'assets/isologo.svg';
+}
+input.value = '';
+}
+
+wrap.addEventListener('click',   () => input.click());
+wrap.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+input.addEventListener('change', () => handleFile(input.files?.[0]));
+}
+
+function fillActivityStats(orders = []) {
+const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
+set('statTotal', orders.length || 0);
+
+const freq = {};
+orders.forEach(o => { if (o.medida) freq[o.medida] = (freq[o.medida] || 0) + 1; });
+const top = Object.entries(freq).sort((a, b) => b[1] - a[1])[0];
+set('statMedida', top ? top[0] : '—');
+
+const now  = new Date();
+const mes  = now.getMonth();
+const anio = now.getFullYear();
+const count = orders.filter(o => {
+if (!o.fecha) return false;
+const d = new Date(o.fecha);
+const parsed = !isNaN(d) ? d : (() => {
+const [dd, mm, yyyy] = String(o.fecha).split('/');
+return new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+})();
+if (isNaN(parsed)) return false;
+return parsed.getMonth() === mes && parsed.getFullYear() === anio;
+}).length;
+set('statMes', count);
+}
+
+function renderLastOrder(orders = []) {
+const wrap = document.getElementById('lastOrderContent');
+if (!wrap) return;
+wrap.textContent = '';
+if (!orders.length) {
+const empty = document.createElement('span');
+empty.className = 'profile-empty';
+empty.textContent = 'Sin pedidos registrados.';
+wrap.appendChild(empty);
+return;
+}
+const item     = orders[0];
+const obra     = item.obra    || 'Sin obra';
+const medida   = item.medida  || '';
+const tipo     = item.tipo_impresion || '';
+const cantidad = item.cantidad ? `${item.cantidad} copia${item.cantidad == 1 ? '' : 's'}` : '';
+const estado   = item.estado  || 'recibido';
+const fecha    = item.fecha   || '';
+
+const row = document.createElement('div');
+row.className = 'last-order-row';
+
+const meta = document.createElement('div');
+meta.className = 'history-meta';
+
+const title = document.createElement('div');
+title.className = 'history-title';
+title.appendChild(document.createTextNode(obra));
+if (fecha) {
+const date = document.createElement('span');
+date.className = 'history-date';
+date.textContent = fecha;
+title.appendChild(date);
+}
+
+const sub = document.createElement('div');
+sub.className = 'history-sub';
+sub.textContent = [medida, tipo, cantidad].filter(Boolean).join(' · ');
+
+meta.appendChild(title);
+meta.appendChild(sub);
+
+const estadoWrap = document.createElement('div');
+estadoWrap.className = 'history-estado';
+estadoWrap.innerHTML = renderEstado(estado);
+
+row.appendChild(meta);
+row.appendChild(estadoWrap);
+wrap.appendChild(row);
+}
+
+function renderFiles(items = []) {
+const wrap = document.getElementById('sharedFiles');
+if (!wrap) return;
+wrap.textContent = '';
+if (!items.length) {
+const empty = document.createElement('div');
+empty.className = 'empty-state';
+empty.innerHTML = `
+  <div class="empty-state-icon">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  </div>
+  <span class="empty-state-label">Sin archivos aún</span>
+  <span class="empty-state-hint">Los PDFs enviados aparecerán acá</span>`;
+wrap.appendChild(empty);
+return;
+}
+items.forEach((item, i) => {
+const row = document.createElement('div');
+row.className = 'file-row anim-fade-up';
+row.style.animationDelay = `${i * 0.07}s`;
+
+const meta = document.createElement('div');
+meta.className = 'file-meta';
+
+const title = document.createElement('div');
+title.className = 'file-title';
+title.textContent = item.archivo || 'Archivo';
+
+const sub = document.createElement('div');
+sub.className = 'file-sub';
+const parts = [item.obra, item.fecha].filter(Boolean);
+sub.textContent = parts.join(' · ') || 'Disponible';
+
+meta.appendChild(title);
+meta.appendChild(sub);
+
+const link = document.createElement('a');
+link.className = 'file-link';
+link.target = '_blank';
+link.rel = 'noopener noreferrer';
+link.textContent = 'Ver archivo';
+
+const raw = typeof item.link === 'string' ? item.link : '';
+let safeHref = '#';
+try {
+const url = new URL(raw);
+if (url.protocol === 'https:' && url.hostname === 'drive.google.com') safeHref = url.href;
+} catch { /* mantener # */ }
+link.href = safeHref;
+
+row.appendChild(meta);
+row.appendChild(link);
+wrap.appendChild(row);
+});
+}
+
+// ── Estado visual de pedidos ──────────────────────────────────────
+
+const ESTADOS = ['recibido', 'en proceso', 'en impresión', 'listo', 'entregado'];
+
+function estadoIndex(estado = '') {
+const e   = estado.toLowerCase().trim();
+const idx = ESTADOS.findIndex(s => s === e);
+return idx >= 0 ? idx : 0;
+}
+
+function renderEstado(estado = '') {
+const idx   = estadoIndex(estado);
+const label = ESTADOS[idx];
+const clase = label.replace(/\s/g, '-');
+const steps = ESTADOS.map((s, i) => {
+const active  = i <= idx ? 'active'  : '';
+const current = i === idx ? 'current' : '';
+return `<span class="estado-step ${active} ${current}" title="${s}"></span>`;
+}).join('');
+return `<div class="estado-badge estado-${clase}">${label}</div> <div class="estado-track">${steps}</div>`;
+}
+
+function renderHistory(items = [], limit = 3) {
+allOrders = items;
+const wrap = document.getElementById('orderHistory');
+if (!wrap) return;
+wrap.textContent = '';
+
+if (!items.length) {
+const empty = document.createElement('div');
+empty.className = 'empty-state';
+empty.innerHTML = `
+  <div class="empty-state-icon">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+  </div>
+  <span class="empty-state-label">Sin pedidos aún</span>
+  <span class="empty-state-hint">Tus pedidos aparecerán acá una vez enviados</span>`;
+wrap.appendChild(empty);
+updateToggleButton();
+return;
+}
+
+const visible = showingAll ? items : items.slice(0, limit);
+visible.forEach((item, i) => {
+const row = document.createElement('div');
+row.className = 'history-row anim-fade-up';
+row.style.animationDelay = `${i * 0.06}s`;
+
+const obra     = item.obra    || 'Sin obra';
+const medida   = item.medida  || '';
+const tipo     = item.tipo_impresion || '';
+const cantidad = item.cantidad ? `${item.cantidad} copia${item.cantidad == 1 ? '' : 's'}` : '';
+const estado   = item.estado  || 'recibido';
+const entrega  = item.entrega ? String(item.entrega) : '';
+
+const main = document.createElement('div');
+main.className = 'history-main';
+
+const meta = document.createElement('div');
+meta.className = 'history-meta';
+
+const title = document.createElement('div');
+title.className = 'history-title';
+title.appendChild(document.createTextNode(obra));
+
+if (item.fecha) {
+const date = document.createElement('span');
+date.className = 'history-date';
+date.textContent = String(item.fecha);
+title.appendChild(date);
+}
+
+if (item.urgente === 'si') {
+const urgent = document.createElement('span');
+urgent.className = 'badge-urgent';
+urgent.textContent = 'urgente';
+title.appendChild(document.createTextNode(' '));
+title.appendChild(urgent);
+}
+
+const sub = document.createElement('div');
+sub.className = 'history-sub';
+sub.textContent = `${[medida, tipo, cantidad].filter(Boolean).join(' · ')}${entrega ? ` · ${entrega}` : ''}`;
+
+meta.appendChild(title);
+meta.appendChild(sub);
+
+const estadoWrap = document.createElement('div');
+estadoWrap.className = 'history-estado';
+estadoWrap.innerHTML = renderEstado(estado);
+
+if (item.precio_estimado && Number(item.precio_estimado) > 0) {
+const price = document.createElement('span');
+price.className = 'history-price';
+price.textContent = formatARS(Number(item.precio_estimado));
+estadoWrap.appendChild(price);
+}
+
+main.appendChild(meta);
+main.appendChild(estadoWrap);
+row.appendChild(main);
+wrap.appendChild(row);
+});
+
+updateToggleButton();
+}
+
+function updateToggleButton() {
+const btn = document.getElementById('toggleHistory');
+if (!btn) return;
+if (allOrders.length <= 3) { btn.style.display = 'none'; return; }
+btn.style.display  = 'inline-flex';
+btn.textContent    = showingAll ? 'VER MENOS' : `VER TODOS (${allOrders.length})`;
+}
+
+// ── Drop zone ─────────────────────────────────────────────────────
+
+function initDropZone() {
+const dropZone  = document.getElementById('dropZone');
+const fileInput = document.getElementById('orderFile');
+const dropLabel = document.getElementById('dropLabel');
+if (!dropZone || !fileInput) return;
+
+function setDropError(msg) {
+selectedFile = null;
+fileInput.value = '';
+dropZone.classList.remove('has-file');
+dropZone.classList.add('drop-error');
+if (dropLabel) {
+dropLabel.textContent = '';
+const line1 = document.createElement('span');
+line1.textContent = msg;
+const hint = document.createElement('span');
+hint.className = 'drop-hint';
+hint.textContent = 'Solo PDF hasta 20 MB';
+dropLabel.appendChild(line1);
+dropLabel.appendChild(hint);
+}
+}
+
+async function handleFile(file) {
+if (!file) return;
+if (file.type !== 'application/pdf') { setDropError('Solo se admite PDF.'); return; }
+if (file.size > 20 * 1024 * 1024)   { setDropError('El archivo supera 20 MB.'); return; }
+selectedFile = file;
+selectedPdfPages = 1;
+dropZone.classList.add('has-file');
+dropZone.classList.remove('drop-error');
+if (dropLabel) {
+const kb = (file.size / 1024).toFixed(0);
+dropLabel.textContent = '';
+const name = document.createElement('span');
+name.className = 'drop-filename';
+name.textContent = `📄 ${file.name}`;
+const size = document.createElement('span');
+size.className = 'drop-size';
+size.textContent = `${kb} KB`;
+dropLabel.appendChild(name);
+dropLabel.appendChild(size);
+}
+const pages = await getPdfPageCount(file);
+selectedPdfPages = pages;
+if (dropLabel && pages > 1) {
+const pagesEl = document.createElement('span');
+pagesEl.className = 'drop-size';
+pagesEl.textContent = `${pages} hojas`;
+dropLabel.appendChild(pagesEl);
+}
+updatePriceDisplay();
+}
+
+dropZone.addEventListener('click',    () => fileInput.click());
+dropZone.addEventListener('keydown',  e  => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+dropZone.addEventListener('dragover', e  => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave',()  => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop',     e  => {
+e.preventDefault();
+dropZone.classList.remove('drag-over');
+handleFile(e.dataTransfer?.files?.[0]);
+});
+fileInput.addEventListener('change', () => handleFile(fileInput.files?.[0]));
+}
+
+const DELIVERY_LABELS = { obra: 'Obra', archivo: 'Archivo', final: 'Entrega final' };
+
+// ── Modal de confirmación ─────────────────────────────────────────
+
+function buildConfirmModal() {
+if (document.getElementById('confirmModal')) return;
+const modal = document.createElement('div');
+modal.id        = 'confirmModal';
+modal.className = 'modal-overlay';
+modal.innerHTML = `<div class="modal-box"> <p class="eyebrow">Confirmá tu pedido</p> <div id="confirmDetails" class="confirm-details"></div> <div id="confirmPriceWrap" class="confirm-price-wrap"> <div class="confirm-price-inner"> <span class="confirm-price-label">Total estimado</span> <span id="confirmPriceValue" class="confirm-price-value">—</span> </div> <p class="confirm-price-note">Precio de referencia. El valor final puede ajustarse según revisión del archivo, terminación y cantidad efectiva.</p> </div> <div class="modal-actions"> <button id="confirmCancel" class="mini-button" type="button">CANCELAR</button> <button id="confirmSend"   class="primary-button" type="button"><span>CONFIRMAR Y ENVIAR</span></button> </div> </div>`;
+document.body.appendChild(modal);
+document.getElementById('confirmCancel')?.addEventListener('click', closeModal);
+modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+}
+
+function openConfirmModal(data) {
+buildConfirmModal();
+const details   = document.getElementById('confirmDetails');
+const priceWrap = document.getElementById('confirmPriceWrap');
+const priceValue = document.getElementById('confirmPriceValue');
+
+if (details) {
+details.textContent = '';
+const addRow = (label, value) => {
+const row = document.createElement('div');
+row.className = 'confirm-row';
+const l = document.createElement('span');
+l.textContent = label;
+const v = document.createElement('strong');
+v.textContent = value;
+row.appendChild(l);
+row.appendChild(v);
+details.appendChild(row);
+};
+
+addRow('Obra', String(data.obra));
+addRow('Medida', String(data.medida));
+addRow('Impresión', String(data.tipo));
+addRow('Cantidad', `${data.cantidad} copia${data.cantidad == 1 ? '' : 's'}`);
+addRow('Entrega', String(DELIVERY_LABELS[data.entrega] || data.entrega));
+addRow('Prioridad', data.urgente ? 'Urgente (+25%)' : 'Normal');
+if (data.notas) addRow('Notas', String(data.notas));
+addRow('Archivo', `📄 ${data.fileName}`);
+}
+
+if (data.price && priceWrap && priceValue) {
+priceWrap.classList.add('is-visible');
+priceValue.textContent  = formatARS(data.price.total);
+const breakdown = [];
+if (data.price.hojas > 1 && data.price.cantidad > 1) breakdown.push(`${data.price.hojas} hojas × ${data.price.cantidad} cop. × ${formatARS(data.price.unitPrice)}`);
+else if (data.price.hojas > 1)    breakdown.push(`${data.price.hojas} hojas × ${formatARS(data.price.unitPrice)}`);
+else if (data.price.cantidad > 1) breakdown.push(`${data.price.cantidad} × ${formatARS(data.price.unitPrice)}`);
+if (data.price.deliveryPrice > 0) breakdown.push(`entrega +${formatARS(data.price.deliveryPrice)}`);
+if (data.price.recargo  > 0) breakdown.push(`⚡ urgente +${formatARS(data.price.recargo)}`);
+if (breakdown.length) {
+const note = priceWrap.querySelector('.confirm-price-note');
+if (note) note.textContent = `${breakdown.join(' · ')} · Precio de referencia, puede variar.`;
+}
+} else if (priceWrap) {
+priceWrap.classList.remove('is-visible');
+}
+
+document.getElementById('confirmModal')?.classList.add('is-open');
+
+return new Promise(resolve => {
+const sendBtn   = document.getElementById('confirmSend');
+const cancelBtn = document.getElementById('confirmCancel');
+if (!sendBtn || !cancelBtn || !sendBtn.parentNode) { resolve(false); return; }
+
+const newSend   = sendBtn.cloneNode(true);
+const newCancel = cancelBtn.cloneNode(true);
+sendBtn.parentNode.replaceChild(newSend, sendBtn);
+cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+newSend.addEventListener('click',   () => { closeModal(); resolve(true);  }, { once: true });
+newCancel.addEventListener('click', () => { closeModal(); resolve(false); }, { once: true });
+});
+}
+
+function closeModal() {
+document.getElementById('confirmModal')?.classList.remove('is-open');
+}
+
+// ── Tabs (index) ─────────────────────────────────────────────────
+
+function initTabs() {
+document.querySelectorAll('.tab').forEach(tab => {
+tab.addEventListener('click', () => switchTab(tab.dataset.view));
+});
+}
+
+function switchTab(view) {
+document.querySelectorAll('.tab').forEach(t => {
+t.classList.toggle('is-active', t.dataset.view === view);
+t.setAttribute('aria-selected', t.dataset.view === view ? 'true' : 'false');
+});
+document.querySelectorAll('.view').forEach(v => {
+v.classList.toggle('is-active', v.dataset.content === view);
+});
+}
+
+// ── Solicitar acceso ──────────────────────────────────────────────
+
+async function handleRequestAccess(e) {
+e.preventDefault();
+const form     = e.currentTarget;
+const estudio  = (form.querySelector('#requestStudio')?.value || '').trim();
+const email    = (form.querySelector('#requestEmail')?.value  || '').trim().toLowerCase();
+const telefono = (form.querySelector('#requestPhone')?.value  || '').trim();
+const msg      = document.getElementById('requestMessage');
+const btn      = form.querySelector('button[type="submit"]');
+
+setMessage(msg, '');
+
+if (!estudio) { setMessage(msg, 'Ingresá el nombre del estudio.', 'is-error'); return; }
+if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+setMessage(msg, 'Ingresá un correo válido.', 'is-error'); return;
+}
+if (!telefono) { setMessage(msg, 'Ingresá un teléfono de contacto.', 'is-error'); return; }
+
+if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Enviando…'; }
+
+try {
+const data = await postData({ action: 'solicitar_acceso', studio: estudio, email, phone: telefono });
+if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Solicitar acceso'; }
+if (data && data.ok !== false) {
+const formView = document.getElementById('requestFormView');
+const sentView = document.getElementById('requestSentView');
+if (formView) formView.style.display = 'none';
+if (sentView) sentView.style.display = 'block';
+} else {
+setMessage(msg, data?.error || 'No se pudo enviar la solicitud.', 'is-error');
+}
+} catch {
+if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Solicitar acceso'; }
+setMessage(msg, 'Error de conexión. Intentá de nuevo.', 'is-error');
+}
+}
+
+// ── LOGIN — Email + Contraseña ──────────────────────────────────
+
+async function handleLogin(event) {
+event.preventDefault();
+const form     = event.currentTarget;
+const email    = (form.querySelector('#loginEmail')?.value || '').trim().toLowerCase();
+const password = form.querySelector('#loginPassword')?.value || '';
+const msg      = document.getElementById('loginMessage');
+const btn      = form.querySelector('button[type="submit"]');
+
+setMessage(msg, '');
+
+if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+setMessage(msg, 'Ingresá un correo válido.', 'is-error'); return;
+}
+if (!password) { setMessage(msg, 'Ingresá tu contraseña.', 'is-error'); return; }
+
+if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span><span>Verificando…</span>'; }
+
+try {
+const data = await postData({ action: 'login', email, password });
+
+if (!data.ok) {
+setMessage(msg, data.error || 'Email o contraseña incorrectos.', 'is-error');
+if (btn) { btn.disabled = false; btn.innerHTML = '<span>Ingresar</span>'; }
+return;
+}
+
+setSessionId(data.sessionId, data.expiresAt);
+window.location.replace('panel.html');
+
+} catch (err) {
+setMessage(msg, err.message || 'Error de conexión. Intentá de nuevo.', 'is-error');
+if (btn) { btn.disabled = false; btn.innerHTML = '<span>Ingresar</span>'; }
+}
+}
+
+// ── FORGOT — Solicitar reset de contraseña ─────────────────────────
+
+async function handleForgot(event) {
+event.preventDefault();
+const form  = event.currentTarget;
+const email = (form.querySelector('#forgotEmail')?.value || '').trim().toLowerCase();
+const msg   = document.getElementById('forgotMessage');
+const btn   = form.querySelector('button[type="submit"]');
+
+setMessage(msg, '');
+
+if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+setMessage(msg, 'Ingresá un correo válido.', 'is-error'); return;
+}
+
+if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span><span>Enviando…</span>'; }
+
+try { await postData({ action: 'request_reset', email }); } catch { /* genérico */ }
+
+if (btn) { btn.disabled = false; btn.innerHTML = '<span>Enviar enlace</span>'; }
+document.getElementById('forgotView').style.display     = 'none';
+document.getElementById('forgotSentView').style.display = 'block';
+}
+
+// ── AUTH — Validar token del magic link ───────────────────────────
+// Se ejecuta solo en auth.html cuando hay ?token= en la URL
+
+async function handleAuthPage() {
+const params = new URLSearchParams(window.location.search);
+const token  = params.get('token') || '';
+
+if (!token || token.length < 20) {
+showAuthError('Enlace inválido', 'Este enlace no tiene el formato correcto.');
+return;
+}
+
+try {
+const data = await postData({ action: 'validate_token', token });
+
+if (!data.ok) {
+showAuthError('Acceso denegado', data.error || 'El enlace no es válido o ya fue utilizado.');
+return;
+}
+
+// Guardar sessionId opaco y limpiar la URL
+setSessionId(data.sessionId, data.expiresAt);
+window.location.replace('panel.html');
+
+} catch {
+showAuthError('Error de conexión', 'No se pudo verificar el acceso. Intentá de nuevo.');
+}
+}
+
+function showAuthError(title, msg) {
+const loading = document.getElementById('authLoading');
+const error   = document.getElementById('authError');
+if (loading) loading.style.display = 'none';
+if (error)   error.style.display   = 'block';
+const titleEl = document.getElementById('authErrorTitle');
+const msgEl   = document.getElementById('authErrorMsg');
+if (titleEl) titleEl.textContent = title;
+if (msgEl)   msgEl.textContent   = msg;
+}
+
+// ── SESIÓN — Verificar con el backend ────────────────────────────
+
+async function requireSession() {
+const sid = getSessionId();
+if (!sid) { window.location.replace('index.html'); return null; }
+
+try {
+const data = await postData({ action: 'get_session' });
+if (!data.ok) {
+clearSession();
+window.location.replace('index.html');
+return null;
+}
+return data; // { email, estudio, expiresAt, … }
+} catch {
+// Error de red transitorio — no cerrar sesión, mostrar aviso al usuario
+const main = document.querySelector('main');
+if (main && !main.querySelector('.network-error-msg')) {
+const div = document.createElement('p');
+div.className = 'status-message is-error network-error-msg';
+div.textContent = 'Sin conexión con el servidor. Recargá la página para reintentar.';
+main.prepend(div);
+}
+return null;
+}
+}
+
+// ── NOTIFICACIONES DE PEDIDO ──────────────────────────────────────
+
+function getOrderStatusCache() {
+try { return JSON.parse(localStorage.getItem('orderStatusCache') || '{}'); } catch { return {}; }
+}
+
+function setOrderStatusCache(orders) {
+const cache = {};
+orders.forEach(o => { if (o.id) cache[String(o.id)] = o.estado || ''; });
+localStorage.setItem('orderStatusCache', JSON.stringify(cache));
+}
+
+function checkOrderStatusChanges(newOrders) {
+if (!newOrders.length) return;
+const cache = getOrderStatusCache();
+if (!Object.keys(cache).length) { setOrderStatusCache(newOrders); return; }
+
+newOrders.forEach(order => {
+const id     = String(order.id || '');
+const estado = (order.estado || '').toLowerCase().trim();
+const prev   = (cache[id] || '').toLowerCase().trim();
+if (!id || prev === estado) return;
+if (estado === 'listo' && prev && prev !== 'listo') {
+const obra = order.obra || 'Tu pedido';
+fireOrderNotification(obra);
+}
+});
+
+setOrderStatusCache(newOrders);
+}
+
+function _sendBrowserNotification(obra) {
+try {
+new Notification('Pedido listo · En Bruto Estudio', {
+  body:  `"${obra}" está listo para retirar.`,
+  icon:  'assets/favicon-192x192.png',
+  badge: 'assets/favicon-32x32.png',
+  tag:   `order-ready-${obra}`,
+});
+} catch { /* navegadores sin soporte */ }
+}
+
+function fireOrderNotification(obra) {
+showToast(`"${obra}" está listo para retirar.`, 'is-success', 6000);
+
+if (!('Notification' in window)) return;
+if (Notification.permission === 'granted') {
+_sendBrowserNotification(obra);
+} else if (Notification.permission === 'default') {
+Notification.requestPermission().then(perm => {
+  if (perm === 'granted') _sendBrowserNotification(obra);
+});
+}
+}
+
+let _pollTimer = null;
+
+function initOrderPolling() {
+if (_pollTimer) return;
+const INTERVAL_MS = 3 * 60 * 1000;
+
+async function poll() {
+try {
+const sid = getSessionId();
+if (!sid) return;
+const data = await postData({ action: 'get_orders' });
+if (data.ok && Array.isArray(data.orders)) {
+checkOrderStatusChanges(data.orders);
+}
+} catch { /* polling silencioso */ }
+}
+
+_pollTimer = setInterval(poll, INTERVAL_MS);
+document.addEventListener('visibilitychange', () => {
+if (document.visibilityState === 'visible') poll();
+});
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────
+
+function animateDashboardCards() {
+const blocks = document.querySelectorAll('.dashboard-grid .info-block');
+blocks.forEach((block, i) => {
+  block.classList.remove('anim-fade-up', 'anim-d1', 'anim-d2', 'anim-d3', 'anim-d4');
+  void block.offsetWidth;
+  block.classList.add('anim-fade-up', [`anim-d1`, `anim-d2`, `anim-d3`, `anim-d4`][Math.min(i, 3)]);
+});
+}
+
+async function loadDashboard() {
+const session = await requireSession();
+if (!session) {
+if (document.querySelector('.network-error-msg')) {
+const hist = document.getElementById('orderHistory');
+if (hist) hist.innerHTML = '<div class="history-sub">Sin conexión. Recargá la página.</div>';
+const fils = document.getElementById('sharedFiles');
+if (fils) fils.innerHTML = '<div class="file-sub">Sin conexión. Recargá la página.</div>';
+}
+return;
+}
+
+fillPanel(session);
+
+try {
+const data = await postData({ action: 'get_dashboard' });
+if (data.ok) {
+fillPanel(data.profile || session);
+checkOrderStatusChanges(data.orders || []);
+renderHistory(data.orders || []);
+renderFiles(data.files   || []);
+animateDashboardCards();
+}
+} catch {
+renderHistory([]);
+renderFiles([]);
+}
+}
+
+// ── PERFIL ────────────────────────────────────────────────────────
+
+async function loadProfile() {
+const session = await requireSession();
+if (!session) return;
+
+fillProfile(session);
+
+try {
+const profileData = await postData({ action: 'get_profile' });
+if (profileData.ok && profileData.profile) fillProfile({ ...profileData.profile, expiresAt: session.expiresAt });
+} catch { /* usar datos de sesión */ }
+
+try {
+const ordersData = await postData({ action: 'get_orders' });
+const orders = ordersData.ok ? (ordersData.orders || []) : [];
+fillActivityStats(orders);
+renderLastOrder(orders);
+} catch {
+fillActivityStats([]);
+renderLastOrder([]);
+}
+}
+
+// ── LOGOUT ────────────────────────────────────────────────────────
+
+async function handleLogout() {
+try {
+await postData({ action: 'logout' });
+} catch { /* continuar de todas formas */ }
+clearSession();
+window.location.replace('index.html');
+}
+
+// ── ENVÍO DE PEDIDO ───────────────────────────────────────────────
+
+async function handleOrderSubmit(event) {
+event.preventDefault();
+if (orderSubmitting) return;
+
+const form         = event.currentTarget;
+const msg          = document.getElementById('orderMessage');
+const submitButton = document.getElementById('orderSubmitBtn');
+
+const file = selectedFile;
+if (!file)                            { setMessage(msg, 'Adjuntá un PDF.', 'is-error'); return; }
+if (file.type !== 'application/pdf')  { setMessage(msg, 'Solo se admite PDF.', 'is-error'); return; }
+if (file.size > 20 * 1024 * 1024)     { setMessage(msg, 'El archivo supera 20 MB.', 'is-error'); return; }
+
+const obra     = (form.querySelector('input[name="code"]')?.value     || '').trim();
+const medida   =  form.querySelector('select[name="size"]')?.value    || '';
+const tipo     =  form.querySelector('select[name="type"]')?.value    || '';
+const cantidad =  form.querySelector('input[name="quantity"]')?.value || '';
+const notas    = (form.querySelector('textarea[name="notes"]')?.value || '').trim();
+const entrega  =  form.querySelector('input[name="delivery"]:checked')?.value || '';
+const urgente  = isUrgent();
+
+if (!obra)    { setMessage(msg, 'Ingresá una obra o código.', 'is-error'); return; }
+if (!medida)  { setMessage(msg, 'Seleccioná una medida.', 'is-error'); return; }
+if (!tipo)    { setMessage(msg, 'Seleccioná el tipo de impresión.', 'is-error'); return; }
+if (!cantidad || Number(cantidad) < 1) { setMessage(msg, 'Ingresá una cantidad válida.', 'is-error'); return; }
+if (!entrega) { setMessage(msg, 'Seleccioná el tipo de entrega.', 'is-error'); return; }
+
+const price = calculatePrice();
+
+const confirmed = await openConfirmModal({
+obra, medida, tipo, cantidad, notas, entrega,
+urgente, fileName: file.name, price,
+});
+if (!confirmed) return;
+
+try {
+orderSubmitting = true;
+if (submitButton) { submitButton.disabled = true; submitButton.innerHTML = '<span class="btn-spinner"></span><span>ENVIANDO…</span>'; }
+setMessage(msg, 'Enviando pedido…');
+
+const base64   = await toBase64(file);
+const fileData = String(base64).split(',')[1];
+
+const data = await postData({
+action:          'crear_pedido',
+obra, medida, tipo, cantidad, notas, entrega,
+urgente:         urgente ? 'si' : 'no',
+precio_estimado: price ? price.total : '',
+fileName:        file.name,
+fileData,
+});
+
+if (!data.ok) throw new Error(data.error || 'No se pudo enviar el pedido.');
+
+setMessage(msg, '');
+showToast('Pedido recibido. Te contactaremos a la brevedad.', 'is-success');
+form.reset();
+resetDropZone();
+selectedFile = null;
+updatePriceDisplay();
+await loadDashboard();
+
+} catch (error) {
+setMessage(msg, error.message || 'No se pudo enviar el pedido.', 'is-error');
+} finally {
+orderSubmitting = false;
+if (submitButton) { submitButton.disabled = false; submitButton.innerHTML = '<span>Solicitar impresión</span>'; }
+}
+}
+
+function resetDropZone() {
+const dropZone  = document.getElementById('dropZone');
+const dropLabel = document.getElementById('dropLabel');
+const fileInput = document.getElementById('orderFile');
+selectedPdfPages = 1;
+if (dropZone)  dropZone.classList.remove('has-file', 'drop-error', 'drag-over');
+if (dropLabel) {
+dropLabel.textContent = '';
+const line1 = document.createElement('span');
+line1.textContent = 'Arrastrá tu PDF acá';
+const hint = document.createElement('span');
+hint.className = 'drop-hint';
+hint.textContent = 'o hacé clic para seleccionar';
+dropLabel.appendChild(line1);
+dropLabel.appendChild(hint);
+}
+if (fileInput) fileInput.value = '';
+}
+
+// ── Listeners de precio en vivo ───────────────────────────────────
+
+function bindPriceListeners() {
+['orderSize', 'orderType', 'orderQty'].forEach(id => {
+document.getElementById(id)?.addEventListener('change', updatePriceDisplay);
+document.getElementById(id)?.addEventListener('input',  updatePriceDisplay);
+});
+document.getElementById('urgentCheck')?.addEventListener('change', updatePriceDisplay);
+document.querySelectorAll('input[name="delivery"]').forEach(r => r.addEventListener('change', updatePriceDisplay));
+}
+
+// ── Botones globales ──────────────────────────────────────────────
+
+function bindGlobalButtons() {
+document.getElementById('profileButton')?.addEventListener('click', () => {
+window.location.href = 'perfil.html';
+});
+document.getElementById('logoutButton')?.addEventListener('click', handleLogout);
+document.getElementById('backToPanel')?.addEventListener('click', () => {
+window.location.href = 'panel.html';
+});
+document.getElementById('goToOrder')?.addEventListener('click', () => {
+window.location.href = 'panel.html#orderForm';
+});
+document.getElementById('toggleHistory')?.addEventListener('click', () => {
+showingAll = !showingAll;
+renderHistory(allOrders);
+});
+document.getElementById('forgotBtn')?.addEventListener('click', () => {
+document.getElementById('loginView').style.display  = 'none';
+document.getElementById('forgotView').style.display = 'block';
+const fe = document.getElementById('forgotEmail');
+const le = document.getElementById('loginEmail');
+if (fe && le) fe.value = le.value;
+fe?.focus();
+});
+document.getElementById('backToLoginBtn')?.addEventListener('click', () => {
+document.getElementById('forgotView').style.display = 'none';
+document.getElementById('loginView').style.display  = 'block';
+});
+document.getElementById('backToLoginBtn2')?.addEventListener('click', () => {
+document.getElementById('forgotSentView').style.display = 'none';
+document.getElementById('loginView').style.display      = 'block';
+});
+document.getElementById('requestResetBtn')?.addEventListener('click', () => {
+const formView = document.getElementById('requestFormView');
+const sentView = document.getElementById('requestSentView');
+if (sentView) sentView.style.display = 'none';
+if (formView) formView.style.display = 'block';
+});
+document.getElementById('togglePwd')?.addEventListener('click', () => {
+const pwd     = document.getElementById('loginPassword');
+const eyeOn   = document.getElementById('eyeIcon');
+const eyeOff  = document.getElementById('eyeOffIcon');
+const btn     = document.getElementById('togglePwd');
+if (!pwd) return;
+const showing = pwd.type === 'text';
+pwd.type = showing ? 'password' : 'text';
+if (eyeOn)  eyeOn.style.display  = showing ? '' : 'none';
+if (eyeOff) eyeOff.style.display = showing ? 'none' : '';
+btn.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+});
+}
+
+// ── Carrusel panel derecho (index.html) ───────────────────────────
+
+function initCarousel() {
+const TOTAL = 5;
+let current = 0;
+let shortcutsOpen = false;
+let touchStartX = 0;
+let touchStartY = 0;
+const visitedSlides = new Set([0]);
+
+const panel       = document.getElementById('enbrutoPanel');
+const slidesEl    = document.getElementById('enbrutoSlides');
+const dotsEl      = document.getElementById('enbrutoDots');
+const shortcutsBtn = document.getElementById('enbrutoShortcutsBtn');
+const shortcutsEl  = document.getElementById('enbrutoShortcuts');
+const closeShortcuts = document.getElementById('closeShortcuts');
+const progressEl  = document.getElementById('enbrutoProgress');
+const counterEl   = document.getElementById('enbrutoCurrent');
+const announceEl  = document.getElementById('slideAnnouncement');
+
+if (!slidesEl || !dotsEl) return;
+
+for (let i = 0; i < TOTAL; i++) {
+  const dot = document.createElement('button');
+  dot.type = 'button';
+  dot.className = 'enbruto-dot' + (i === 0 ? ' is-active is-visited' : '');
+  dot.setAttribute('role', 'tab');
+  dot.setAttribute('aria-label', `Ir a diapositiva ${i + 1}`);
+  dot.setAttribute('aria-selected', i === 0 ? 'true' : 'false');
+  dot.setAttribute('tabindex', i === 0 ? '0' : '-1');
+  dot.addEventListener('click', () => goTo(i));
+  dotsEl.appendChild(dot);
+}
+
+function announceSlide(i) {
+  const title = slidesEl.children[i]
+    ?.querySelector('.enbruto-title')
+    ?.textContent?.replace(/\s+/g, ' ')?.trim() || '';
+  if (announceEl) announceEl.textContent = `Diapositiva ${i + 1} de ${TOTAL}: ${title}`;
+}
+
+function goTo(index) {
+  current = Math.max(0, Math.min(TOTAL - 1, index));
+  visitedSlides.add(current);
+  slidesEl.style.transform = `translateX(-${current * 100}%)`;
+  dotsEl.querySelectorAll('.enbruto-dot').forEach((dot, i) => {
+    const active = i === current;
+    dot.classList.toggle('is-active', active);
+    dot.classList.toggle('is-visited', visitedSlides.has(i));
+    dot.setAttribute('aria-selected', active ? 'true' : 'false');
+    dot.setAttribute('tabindex', active ? '0' : '-1');
+  });
+  if (counterEl) counterEl.textContent = String(current + 1).padStart(2, '0');
+  if (progressEl) progressEl.style.width = `${((current + 1) / TOTAL) * 100}%`;
+  announceSlide(current);
+}
+
+function openShortcuts() {
+  shortcutsOpen = true;
+  shortcutsEl.classList.add('active');
+  shortcutsEl.setAttribute('aria-hidden', 'false');
+  shortcutsBtn.setAttribute('aria-expanded', 'true');
+  closeShortcuts.focus();
+}
+
+function closeShortcutsPanel() {
+  shortcutsOpen = false;
+  shortcutsEl.classList.remove('active');
+  shortcutsEl.setAttribute('aria-hidden', 'true');
+  shortcutsBtn.setAttribute('aria-expanded', 'false');
+  shortcutsBtn.focus();
+}
+
+shortcutsBtn?.addEventListener('click', () => shortcutsOpen ? closeShortcutsPanel() : openShortcuts());
+closeShortcuts?.addEventListener('click', closeShortcutsPanel);
+
+slidesEl.addEventListener('touchstart', (e) => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+slidesEl.addEventListener('touchend', (e) => {
+  const dx = touchStartX - e.changedTouches[0].clientX;
+  const dy = touchStartY - e.changedTouches[0].clientY;
+  if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) goTo(dx > 0 ? current + 1 : current - 1);
+}, { passive: true });
+
+document.addEventListener('keydown', (e) => {
+  if (!panel || !panel.matches(':hover') && document.activeElement?.closest('#enbrutoPanel') === null) return;
+  if (e.target.matches('input, textarea')) return;
+  switch (e.key) {
+    case '?':          e.preventDefault(); shortcutsOpen ? closeShortcutsPanel() : openShortcuts(); break;
+    case 'Escape':     if (shortcutsOpen) { e.preventDefault(); closeShortcutsPanel(); } break;
+    case 'ArrowRight': if (!shortcutsOpen) { e.preventDefault(); goTo(current + 1); } break;
+    case 'ArrowLeft':  if (!shortcutsOpen) { e.preventDefault(); goTo(current - 1); } break;
+    case 'Home':       if (!shortcutsOpen) { e.preventDefault(); goTo(0); } break;
+    case 'End':        if (!shortcutsOpen) { e.preventDefault(); goTo(TOTAL - 1); } break;
+  }
+});
+
+panel?.addEventListener('focusin', () => announceSlide(current));
+
+// Auto-advance: avanza cada 5 s, pausa si el puntero está sobre el panel
+let autoTimer = null;
+function startAuto() {
+  stopAuto();
+  autoTimer = setInterval(() => goTo((current + 1) % TOTAL), 5000);
+}
+function stopAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+}
+panel?.addEventListener('mouseenter', stopAuto);
+panel?.addEventListener('mouseleave', startAuto);
+panel?.addEventListener('focusin',    stopAuto);
+panel?.addEventListener('focusout',   (e) => {
+  if (!panel.contains(e.relatedTarget)) startAuto();
+});
+startAuto();
+
+// Botones del último slide → activan las tabs del panel izquierdo
+panel?.querySelectorAll('[data-tab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tabEl = document.querySelector(`.tab[data-view="${btn.dataset.tab}"]`);
+    tabEl?.click();
+    document.getElementById('loginEmail')?.focus();
+  });
+});
+
+goTo(0);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+bindGlobalButtons();
+
+const path = window.location.pathname;
+const page = path.split('/').pop() || 'index.html';
+
+// ── auth.html — validar token del magic link
+if (page === 'auth.html') {
+handleAuthPage();
+return;
+}
+
+// ── index.html
+const loginForm = document.getElementById('loginForm');
+if (loginForm) {
+initTabs();
+initCarousel();
+loginForm.addEventListener('submit', handleLogin);
+document.getElementById('forgotForm')?.addEventListener('submit', handleForgot);
+document.getElementById('requestForm')?.addEventListener('submit', handleRequestAccess);
+
+const loginView        = document.getElementById('loginView');
+const sessionCheckView = document.getElementById('sessionCheckView');
+const sid              = getSessionId();
+
+if (sid) {
+// Hay sesión local → mostrar spinner y verificar en el backend
+if (sessionCheckView) sessionCheckView.style.display = 'block';
+postData({ action: 'get_session' })
+.then(data => {
+if (data.ok) {
+window.location.replace('panel.html');
+} else {
+// Sesión expirada en el backend → mostrar form
+if (sessionCheckView) sessionCheckView.style.display = 'none';
+if (loginView)        loginView.style.display        = 'block';
+}
+})
+.catch(() => {
+if (sessionCheckView) sessionCheckView.style.display = 'none';
+if (loginView)        loginView.style.display        = 'block';
+});
+} else {
+// Sin sesión local → mostrar form directamente
+if (loginView) loginView.style.display = 'block';
+}
+return;
+}
+
+// ── panel.html
+const orderForm = document.getElementById('orderForm');
+if (orderForm) {
+loadDashboard();
+fetchPrices();
+initDropZone();
+bindPriceListeners();
+orderForm.addEventListener('submit', handleOrderSubmit);
+initOrderPolling();
+return;
+}
+
+// ── perfil.html
+if (document.getElementById('profileStudio')) {
+loadProfile();
+initLogoUpload();
+return;
+}
+});
