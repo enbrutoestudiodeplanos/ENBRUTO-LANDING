@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Control Técnico · En Bruto Estudio</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+  <link rel="stylesheet" href="preflight.css" />
+</head>
+<body class="pf-standalone">
+
+  <main class="pf-shell">
+
+    <header class="pf-header">
+      <div class="pf-header-main">
+        <span class="pf-kicker">EN BRUTO ESTUDIO</span>
+        <h1 class="pf-title">ANTES DE LA OBRA</h1>
+        <p class="pf-sub">Control Técnico de Pre-impresión</p>
+      </div>
+      <a href="panel.html" class="nav-pf-toggle nav-pf-toggle--on" aria-label="Volver al panel">
+        <span class="nav-pf-label">Panel</span>
+        <span class="nav-pf-track"><span class="nav-pf-thumb"></span></span>
+      </a>
+    </header>
+
+    <section class="pf-drop-zone" id="pfDrop" tabindex="0" role="button" aria-label="Subir PDF para análisis">
+      <div class="pf-drop-inner" id="pfDropInner">
+        <div class="pf-drop-icon">[ PDF ]</div>
+        <p class="pf-drop-label">Arrastrá o seleccioná un plano PDF</p>
+        <p class="pf-drop-hint">Máx. 10 MB · Solo archivos PDF</p>
+      </div>
+      <input type="file" id="pfFile" accept="application/pdf" style="display:none" />
+    </section>
+
+    <div id="pfStatus" class="pf-status" style="display:none;">
+      <span class="pf-status-dot"></span>
+      <span id="pfStatusText" class="pf-status-text"></span>
+    </div>
+
+    <section id="pfResult" class="pf-result" style="display:none;"></section>
+
+  </main>
+
+  <script src="preflight-app.js"></script>
+</body>
+</html>

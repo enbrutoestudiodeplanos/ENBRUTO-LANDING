@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /panel.html
+Disallow: /perfil.html
+Disallow: /auth.html
+Disallow: /reset-password.html
+Disallow: /set-password.html
+Allow: /

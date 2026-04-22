@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Panel · En Bruto Estudio</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+  <meta name="theme-color" content="#0a0a0a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700;800&display=swap" /></noscript>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="preflight.css" />
+</head>
+<body>
+  <main class="site-shell">
+    <section class="card dashboard-card">
+
+      <header class="panel-header">
+        <div>
+          <h1 class="sr-only">Panel de pedidos · En Bruto Estudio</h1>
+          <p class="eyebrow">Panel</p>
+          <h2 id="panelStudio" style="font-size:clamp(1.4rem,2.5vw,2rem);font-weight:800;letter-spacing:-0.015em;">—</h2>
+          <p class="helper" id="panelEmail" style="margin-top:4px;"></p>
+        </div>
+        <div class="header-actions">
+          <div class="panel-timestamp" aria-live="off">
+            <span class="panel-ts-date" id="panelTsDate">—</span>
+            <span class="panel-ts-time" id="panelTsTime">--:--:--</span>
+          </div>
+          <div class="header-buttons">
+            <button id="pfToggleBtn" type="button" class="nav-pf-toggle" aria-label="Antes de la Obra — Control técnico" aria-pressed="false">
+              <span class="nav-pf-label">BRUTO</span>
+              <span class="nav-pf-track"><span class="nav-pf-thumb"></span></span>
+            </button>
+            <button id="profileButton" class="mini-button accent-button" type="button">Mi perfil</button>
+            <button id="logoutButton"  class="mini-button" type="button">Salir</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="dashboard-grid">
+
+        <!-- Columna izquierda: pedidos + archivos -->
+        <div style="display:grid;gap:20px;align-content:start;">
+
+          <!-- Historial -->
+          <div class="info-block">
+            <div class="block-head between">
+              <h2>Pedidos</h2>
+              <button id="toggleHistory" class="mini-button" type="button" style="display:none;font-size:0.72rem;min-height:36px;padding:0 14px;">VER TODOS</button>
+            </div>
+            <div id="orderHistory" class="history-list">
+              <div class="sk-row">
+                <div class="skeleton sk-line" style="width:55%"></div>
+                <div class="skeleton sk-line-sm" style="width:38%"></div>
+              </div>
+              <div class="sk-row">
+                <div class="skeleton sk-line" style="width:65%"></div>
+                <div class="skeleton sk-line-sm" style="width:42%"></div>
+              </div>
+              <div class="sk-row">
+                <div class="skeleton sk-line" style="width:48%"></div>
+                <div class="skeleton sk-line-sm" style="width:30%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Archivos compartidos -->
+          <div class="info-block">
+            <div class="block-head">
+              <h2>Archivos</h2>
+            </div>
+            <div id="sharedFiles" class="file-list">
+              <div class="sk-row">
+                <div class="skeleton sk-line" style="width:60%"></div>
+                <div class="skeleton sk-line-sm" style="width:36%"></div>
+              </div>
+              <div class="sk-row">
+                <div class="skeleton sk-line" style="width:50%"></div>
+                <div class="skeleton sk-line-sm" style="width:28%"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Columna derecha: formulario de pedido -->
+        <div class="info-block" id="orderFormBlock">
+          <div class="block-head">
+            <h2>Nuevo pedido</h2>
+          </div>
+
+          <form id="orderForm" class="stack-form compact-form" novalidate>
+
+            <!-- Obra -->
+            <label for="orderCode">Obra / Código</label>
+            <div class="field-wrap">
+              <input id="orderCode" name="code" type="text"
+                placeholder="Ej: Torre Palermo — PB"
+                autocomplete="off" required />
+            </div>
+
+            <!-- Medida + Tipo -->
+            <div class="grid-two">
+              <div>
+                <label for="orderSize">Medida</label>
+                <div class="field-wrap">
+                  <select id="orderSize" name="size" required>
+                    <option value="">Seleccioná</option>
+                    <option value="A1">A1</option>
+                    <option value="A2">A2</option>
+                    <option value="A3">A3</option>
+                    <option value="A4">A4</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label for="orderType">Impresión</label>
+                <div class="field-wrap">
+                  <select id="orderType" name="type" required>
+                    <option value="">Seleccioná</option>
+                    <option value="Color">Color</option>
+                    <option value="B&N">Blanco y negro</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Cantidad + Urgente -->
+            <div class="grid-two" style="align-items:end;">
+              <div>
+                <label for="orderQty">Cantidad</label>
+                <div class="field-wrap">
+                  <input id="orderQty" name="quantity" type="number"
+                    min="1" max="999" value="1" required />
+                </div>
+              </div>
+              <div style="padding-bottom:2px;">
+                <label class="urgency-check-label">
+                  <input type="checkbox" id="urgentCheck" name="urgente" />
+                  <span class="urgency-check-box"></span>
+                  Urgente (+25%)
+                </label>
+              </div>
+            </div>
+
+            <!-- Tipo de entrega -->
+            <fieldset style="border:0;padding:0;margin:0;">
+              <legend style="display:block;width:100%;text-transform:uppercase;letter-spacing:0.18em;color:rgba(255,255,255,0.68);font-size:0.76rem;font-weight:700;margin-top:8px;margin-bottom:10px;">Tipo de entrega</legend>
+              <div class="delivery-options">
+
+                <label class="delivery-option">
+                  <input type="radio" name="delivery" value="obra" required />
+                  <div class="delivery-card">
+                    <div class="delivery-top">
+                      <span class="delivery-name">Obra</span>
+                      <span class="delivery-check"></span>
+                    </div>
+                    <span class="delivery-detail">Enrollado para uso en obra</span>
+                  </div>
+                </label>
+
+                <label class="delivery-option">
+                  <input type="radio" name="delivery" value="archivo" />
+                  <div class="delivery-card">
+                    <div class="delivery-top">
+                      <span class="delivery-name">Archivo</span>
+                      <span class="delivery-check"></span>
+                    </div>
+                    <span class="delivery-detail">Plegado para guardar y consultar</span>
+                  </div>
+                </label>
+
+                <label class="delivery-option">
+                  <input type="radio" name="delivery" value="final" />
+                  <div class="delivery-card">
+                    <div class="delivery-top">
+                      <span class="delivery-name">Entrega Final</span>
+                      <span class="delivery-check"></span>
+                    </div>
+                    <span class="delivery-detail">Presentación premium para cliente</span>
+                  </div>
+                </label>
+
+              </div>
+            </fieldset>
+
+            <!-- Notas -->
+            <label for="orderNotes">Notas (opcional)</label>
+            <div class="field-wrap">
+              <textarea id="orderNotes" name="notes"
+                placeholder="Indicaciones especiales…"></textarea>
+            </div>
+
+            <!-- Drop zone -->
+            <div>
+              <label>Archivo PDF</label>
+              <div id="dropZone" class="drop-zone" tabindex="0" role="button" aria-label="Subir PDF">
+                <div id="dropLabel" class="drop-label">
+                  <span>Arrastrá tu PDF acá</span>
+                  <span class="drop-hint">o hacé clic para seleccionar</span>
+                </div>
+              </div>
+              <input type="file" id="orderFile" name="file" accept="application/pdf" style="display:none" />
+            </div>
+
+            <!-- El Veedor — Mesa de Luz -->
+            <div class="veedor-toggle-row">
+              <div class="veedor-label-wrap">
+                <span class="veedor-name">Mesa de Luz</span>
+                <span class="veedor-beta">BETA</span>
+              </div>
+              <label class="toggle-switch" aria-label="Activar verificación IA de escala">
+                <input type="checkbox" id="veedorSwitch" />
+                <span class="toggle-track"><span class="toggle-thumb"></span></span>
+              </label>
+            </div>
+            <div id="veedorResult" style="display:none;"></div>
+
+            <!-- Precio estimado -->
+            <div id="priceDisplay" style="display:none;" class="price-display">
+              <div class="price-inner">
+                <span class="price-label">Precio estimado</span>
+                <span id="priceBreakdown" class="price-breakdown"></span>
+                <span class="price-note" style="font-size:0.68rem;color:rgba(255,255,255,0.28);margin-top:2px;">
+                  Estimación automática · El valor final puede ajustarse según revisión técnica
+                </span>
+              </div>
+              <span id="priceValue" class="price-value">—</span>
+            </div>
+
+            <!-- Submit -->
+            <button class="primary-button" type="submit" id="orderSubmitBtn">
+              <span>Solicitar impresión</span>
+            </button>
+
+            <p id="orderMessage" class="status-message" aria-live="polite"></p>
+
+            <!-- Campo oculto para estudio (lo llena JS desde sesión) -->
+            <input type="hidden" id="orderStudy" name="study" />
+
+          </form>
+        </div>
+
+      </div>
+      <!-- Preflight embebido — se muestra al activar el toggle -->
+      <div id="pfEmbedded" class="pf-embedded" style="display:none;">
+        <section class="pf-drop-zone" id="pfDrop" tabindex="0" role="button" aria-label="Subir PDF para análisis">
+          <div class="pf-drop-inner" id="pfDropInner">
+            <div class="pf-drop-icon">PDF</div>
+            <p class="pf-drop-label">Arrastrá o seleccioná un plano PDF</p>
+            <p class="pf-drop-hint">Máx. 10 MB · Solo archivos PDF</p>
+          </div>
+          <input type="file" id="pfFile" accept="application/pdf" style="display:none" />
+        </section>
+        <p class="pf-disclaimer">Esta herramienta utiliza modelos de inteligencia artificial para asistir en la revisión preliminar de planos. Los resultados pueden ser incompletos o inexactos y deben considerarse únicamente como una ayuda orientativa. No sustituye la revisión técnica ni los controles profesionales. La validación final del contenido, escala, normativa y calidad del archivo es responsabilidad exclusiva del estudio o profesional interviniente.</p>
+        <div id="pfStatus" class="pf-status" style="display:none;">
+          <span class="pf-status-dot"></span>
+          <span id="pfStatusText" class="pf-status-text"></span>
+        </div>
+        <section id="pfResult" class="pf-result" style="display:none;"></section>
+      </div>
+
+    </section>
+  </main>
+  <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="false"></div>
+  <script src="app.js"></script>
+  <script src="preflight-app.js"></script>
+</body>
+</html>
